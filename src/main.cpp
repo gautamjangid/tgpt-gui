@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <cctype>
 
 // ----------------------------------------------------------------------
 // Global variables
@@ -34,8 +35,38 @@ Fl_Button          *btn_send   = nullptr;
 Fl_Button          *btn_copy   = nullptr;
 Fl_Button          *btn_next   = nullptr;
 Fl_Button          *btn_cancel = nullptr;
-Fl_Button          *btn_history= nullptr;
 Fl_Output          *code_counter = nullptr;
+
+bool needs_redraw = false;
+
+std::string sanitize_output(const std::string& raw) {
+    std::string out;
+    bool in_ansi = false;
+    for (size_t i = 0; i < raw.length(); ++i) {
+        if (raw[i] == '\033') {
+            in_ansi = true;
+            if (i + 1 < raw.length() && raw[i+1] == '[') {
+                i++;
+                while (i + 1 < raw.length() && !std::isalpha(raw[i+1])) i++;
+                if (i + 1 < raw.length()) i++;
+            }
+            in_ansi = false;
+            continue;
+        }
+        if (in_ansi) continue;
+
+        if (raw[i] == '\r') {
+            size_t last_nl = out.find_last_of('\n');
+            if (last_nl == std::string::npos) out.clear();
+            else out.resize(last_nl + 1);
+        } else if (raw[i] == '\b') {
+            if (!out.empty() && out.back() != '\n') out.pop_back();
+        } else {
+            out += raw[i];
+        }
+    }
+    return out;
+}
 
 struct CodeBlock {
     std::string lang;
@@ -139,9 +170,27 @@ std::string parse_markdown_to_html(const std::string& md, bool clear_blocks = tr
             current_block_text += line + "\n";
             html << escape_html(line) << "\n";
         } else {
+            // Heading formatting
+            if (line.compare(0, 2, "# ") == 0) line = "<h2>" + escape_html(line.substr(2)) + "</h2>";
+            else if (line.compare(0, 3, "## ") == 0) line = "<h3>" + escape_html(line.substr(3)) + "</h3>";
+            else if (line.compare(0, 4, "### ") == 0) line = "<h4>" + escape_html(line.substr(4)) + "</h4>";
+            else {
+                line = escape_html(line);
+            }
+            
+            // Bold formatting
+            size_t pos = 0;
+            while ((pos = line.find("**", pos)) != std::string::npos) {
+                size_t end = line.find("**", pos + 2);
+                if (end != std::string::npos) {
+                    line = line.substr(0, pos) + "<b>" + line.substr(pos + 2, end - (pos + 2)) + "</b>" + line.substr(end + 2);
+                    pos += 3;
+                } else break;
+            }
+
             // Basic layout
             if (line.empty()) html << "<br>";
-            else html << escape_html(line) << "<br>";
+            else html << line << "<br>";
         }
     }
     
@@ -170,6 +219,7 @@ void update_ui_code_counter() {
 
 // Update the entire output box based on chat history + current typing response
 void redraw_chat_window() {
+    int current_top = output_box->topline();
     std::ostringstream full_html;
     full_html << "<html><body style='font-family: sans-serif; font-size: 11pt;'>";
     
@@ -184,13 +234,19 @@ void redraw_chat_window() {
 
     if (processing && !current_response_raw.empty()) {
         full_html << "<div style='color:#00aa00;'><b>tgpt (typing...):</b></div>";
-        full_html << "<div>" << parse_markdown_to_html(current_response_raw, true) << "</div><br>";
+        full_html << "<div>" << parse_markdown_to_html(sanitize_output(current_response_raw), true) << "</div><br>";
     } else if (processing) {
         full_html << "<div style='color:#00aa00;'><b>tgpt:</b> <i>thinking...</i></div><br>";
     }
 
     full_html << "</body></html>";
     output_box->value(full_html.str().c_str());
+    
+    // Attempt to maintain scroll position unless we're actively streaming from bottom
+    if (processing && current_top > 0) {
+        output_box->topline(current_top);
+    }
+    
     update_ui_code_counter();
 }
 
@@ -282,11 +338,20 @@ void next_code_cb(Fl_Widget*, void*) {
     code_counter->value(buf);
 }
 
+void timer_redraw_cb(void*) {
+    if (processing || needs_redraw) {
+        if (needs_redraw) redraw_chat_window();
+        needs_redraw = false;
+        Fl::repeat_timeout(0.15, timer_redraw_cb);
+    }
+}
+
 // ----------------------------------------------------------------------
 // Main Application Logic
 // ----------------------------------------------------------------------
 void finish_processing(bool cancelled=false) {
     processing = false;
+    Fl::remove_timeout(timer_redraw_cb);
     btn_send->activate();
     if (child_pipe != -1) {
         Fl::remove_fd(child_pipe);
@@ -299,7 +364,7 @@ void finish_processing(bool cancelled=false) {
         child_pid = 0; // waitpid reaps the defunct child
     }
     
-    std::string final_response = cancelled ? current_response_raw + "\n*(Cancelled)*" : current_response_raw;
+    std::string final_response = cancelled ? sanitize_output(current_response_raw) + "\n*(Cancelled)*" : sanitize_output(current_response_raw);
     if (!chat_history.empty()) {
         chat_history.back().second = final_response;
         save_history_entry(chat_history.back().first, final_response);
@@ -321,7 +386,7 @@ void pipe_read_cb(int fd, void*) {
     ssize_t bytes = read(fd, buffer, sizeof(buffer));
     if (bytes > 0) {
         current_response_raw.append(buffer, bytes);
-        redraw_chat_window();
+        needs_redraw = true;
     } else if (bytes == 0 || (bytes == -1 && errno != EAGAIN && errno != EINTR)) {
         finish_processing(false);
     }
@@ -347,6 +412,9 @@ void send_cb(Fl_Widget*, void*) {
 
     redraw_chat_window();
     Fl::check();
+
+    needs_redraw = true;
+    Fl::add_timeout(0.15, timer_redraw_cb);
 
     // Start process
     int pipefd[2];
@@ -407,10 +475,9 @@ int main(int argc, char **argv) {
     main_window = new Fl_Window(750, 630, "tgpt Lightweight GUI");
     
     Fl_Menu_Bar *menubar = new Fl_Menu_Bar(0, 0, 750, 25);
-    menubar->add("Settings/History Limit/5",  0, limit_cb, (void*)(intptr_t)5,  FL_MENU_RADIO);
-    menubar->add("Settings/History Limit/10", 0, limit_cb, (void*)(intptr_t)10, FL_MENU_RADIO);
-    menubar->add("Settings/History Limit/20", 0, limit_cb, (void*)(intptr_t)20, FL_MENU_RADIO);
-    menubar->mode(0, FL_MENU_RADIO | FL_MENU_VALUE);
+    menubar->add("History/Load Last 5 Chats",  0, limit_cb, (void*)(intptr_t)5);
+    menubar->add("History/Load Last 10 Chats", 0, limit_cb, (void*)(intptr_t)10);
+    menubar->add("History/Load Last 20 Chats", 0, limit_cb, (void*)(intptr_t)20);
 
     // Output area
     output_box = new Fl_Help_View(10, 35, 730, 420);
@@ -429,9 +496,6 @@ int main(int argc, char **argv) {
 
     btn_cancel = new Fl_Button(600, 510, 140, 25, "Cancel");
     btn_cancel->callback(cancel_cb);
-    
-    btn_history = new Fl_Button(600, 540, 140, 25, "Reload History");
-    btn_history->callback(load_history_cb);
 
     Fl_Output *lbl = new Fl_Output(600, 570, 50, 25, "Block:");
     lbl->box(FL_NO_BOX);
@@ -451,9 +515,6 @@ int main(int argc, char **argv) {
     Fl::add_handler(global_handler);
 
     main_window->show(argc, argv);
-    
-    // Try to load initial history
-    load_history_cb(nullptr, nullptr);
 
     return Fl::run();
 }
