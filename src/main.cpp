@@ -221,28 +221,38 @@ void update_ui_code_counter() {
 void redraw_chat_window() {
     int current_top = output_box->topline();
     std::ostringstream full_html;
-    full_html << "<html><body style='font-family: sans-serif; font-size: 11pt;'>";
+    // FLTK 1.3 doesn't support CSS styles well, so we use traditional HTML tags
+    full_html << "<html><body><font face='sans-serif' size='4'>";
     
-    for (const auto& msg : chat_history) {
-        full_html << "<div style='color:#0000aa;'><b>You:</b></div>";
-        full_html << "<div>" << escape_html(msg.first) << "</div><br>";
-        
-        full_html << "<div style='color:#00aa00;'><b>tgpt:</b></div>";
-        // Do not extract blocks for history renders to avoid messing up the current blocks
-        full_html << "<div>" << parse_markdown_to_html(msg.second, false) << "</div><br><hr><br>";
-    }
-
+    // 1. Current processing msg (if any) is the latest, so it goes at the absolute top
     if (processing && !current_response_raw.empty()) {
-        full_html << "<div style='color:#00aa00;'><b>tgpt (typing...):</b></div>";
-        full_html << "<div>" << parse_markdown_to_html(sanitize_output(current_response_raw), true) << "</div><br>";
+        full_html << "<font color='#00aa00'><b>tgpt (typing...):</b></font><br>";
+        full_html << parse_markdown_to_html(sanitize_output(current_response_raw), true) << "<br><hr><br>";
     } else if (processing) {
-        full_html << "<div style='color:#00aa00;'><b>tgpt:</b> <i>thinking...</i></div><br>";
+        full_html << "<font color='#00aa00'><b>tgpt:</b> <i>thinking...</i></font><br><br><hr><br>";
     }
 
-    full_html << "</body></html>";
+    // 2. Chat history in reverse order
+    for (auto it = chat_history.rbegin(); it != chat_history.rend(); ++it) {
+        const auto& msg = *it;
+        
+        full_html << "<font color='#0000aa'><b>You:</b></font><br>";
+        full_html << escape_html(msg.first) << "<br><br>";
+        
+        full_html << "<font color='#00aa00'><b>tgpt:</b></font><br>";
+        // Do not extract blocks for history renders to avoid messing up the current blocks
+        full_html << parse_markdown_to_html(msg.second, false) << "<br>";
+        
+        // Add separator if it's not the last loaded historical message
+        if (std::next(it) != chat_history.rend()) {
+            full_html << "<br><hr><br>";
+        }
+    }
+
+    full_html << "</font></body></html>";
     output_box->value(full_html.str().c_str());
     
-    // Attempt to maintain scroll position unless we're actively streaming from bottom
+    // Attempt to maintain scroll position
     if (processing && current_top > 0) {
         output_box->topline(current_top);
     }
