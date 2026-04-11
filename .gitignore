@@ -1,0 +1,13 @@
+# Ignore docs folder as requested
+docs/
+
+# Build outputs
+*.o
+*.out
+/scripts/tgpt-gui
+/src/tgpt-gui
+/tgpt-gui
+
+# OS generated files
+.DS_Store
+Thumbs.db
