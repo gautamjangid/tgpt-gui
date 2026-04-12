@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <FL/Fl_Input.H>
 
 namespace tgpt {
 
@@ -27,7 +28,7 @@ void redraw_chat_window() {
     int current_top = output_box->topline();
     std::ostringstream full_html;
     // FLTK 1.3 doesn't support CSS styles well, so we use traditional HTML tags
-    full_html << "<html><body><font face='sans-serif' size='4'>";
+    full_html << "<html><body><font face='sans-serif,FreeSans,Noto Sans,Lohit Devanagari,Nirmala UI' size='4'>";
     
     // 1. Current processing msg (if any) is the latest, so it goes at the absolute top
     if (processing && !current_response_raw.empty()) {
@@ -156,6 +157,62 @@ void close_chat_cb(Fl_Widget*, void*) {
 
 void exit_cb(Fl_Widget*, void*) {
     exit(0);
+}
+
+struct SettingsDialogData {
+    Fl_Window* win;
+    Fl_Input* inp_provider;
+    Fl_Input* inp_model;
+    Fl_Input* inp_apikey;
+    Fl_Input* inp_args;
+};
+
+void settings_save_cb(Fl_Widget*, void* v) {
+    SettingsDialogData* data = (SettingsDialogData*)v;
+    tgpt_provider = data->inp_provider->value();
+    tgpt_model    = data->inp_model->value();
+    tgpt_api_key  = data->inp_apikey->value();
+    tgpt_custom_args = data->inp_args->value();
+    tgpt::save_settings();
+    data->win->hide();
+    delete data->win;
+    delete data;
+}
+
+void settings_cb(Fl_Widget*, void*) {
+    SettingsDialogData* data = new SettingsDialogData();
+    data->win = new Fl_Window(400, 250, "tgpt-cli Settings");
+    
+    data->inp_provider = new Fl_Input(120, 20, 260, 30, "Provider:");
+    data->inp_provider->value(tgpt_provider.c_str());
+    
+    data->inp_model = new Fl_Input(120, 60, 260, 30, "Model:");
+    data->inp_model->value(tgpt_model.c_str());
+    
+    data->inp_apikey = new Fl_Input(120, 100, 260, 30, "API Key:");
+    data->inp_apikey->value(tgpt_api_key.c_str());
+    
+    data->inp_args = new Fl_Input(120, 140, 260, 30, "Extra Args:");
+    data->inp_args->tooltip("Space-separated args (e.g. -i -m)");
+    data->inp_args->value(tgpt_custom_args.c_str());
+    
+    Fl_Button* btn_save = new Fl_Button(150, 190, 100, 30, "Save");
+    btn_save->callback(settings_save_cb, data);
+    
+    data->win->end();
+    data->win->show();
+}
+
+void about_cb(Fl_Widget*, void*) {
+    fl_message("tgpt Lightweight GUI v1.0.4\nAuthor: Gautam Jangid");
+}
+
+void updates_cb(Fl_Widget*, void*) {
+    fl_message("To update to the latest version, run:\n\n"
+               "git clone -b main https://github.com/gautamjangid/tgpt-gui.git\n"
+               "cd tgpt-gui/scripts\n"
+               "chmod +x install.sh\n"
+               "./install.sh");
 }
 
 void copy_block_by_index(int idx) {

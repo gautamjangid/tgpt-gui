@@ -50,4 +50,13 @@ extern int history_limit;
 extern std::deque<std::pair<std::string, std::string>> chat_history; // {prompt, response}
 extern std::string current_history_filepath;
 
+// Settings State
+extern std::string tgpt_provider;
+extern std::string tgpt_model;
+extern std::string tgpt_api_key;
+extern std::string tgpt_custom_args;
+
+void load_settings();
+void save_settings();
+
 } // namespace tgpt

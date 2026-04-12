@@ -1,4 +1,6 @@
 #include "Globals.hpp"
+#include "Utils.hpp"
+#include <fstream>
 
 namespace tgpt {
 
@@ -27,5 +29,41 @@ int current_code_idx = -1;
 int history_limit = 5;
 std::deque<std::pair<std::string, std::string>> chat_history;
 std::string current_history_filepath = "";
+
+// Settings State
+std::string tgpt_provider = "";
+std::string tgpt_model = "";
+std::string tgpt_api_key = "";
+std::string tgpt_custom_args = "";
+
+void load_settings() {
+    std::string filepath = get_settings_dir() + "/config.txt";
+    std::ifstream ifs(filepath);
+    if (!ifs.is_open()) return;
+    
+    std::string line;
+    while (std::getline(ifs, line)) {
+        size_t eq = line.find('=');
+        if (eq != std::string::npos) {
+            std::string key = line.substr(0, eq);
+            std::string value = line.substr(eq + 1);
+            if (key == "provider") tgpt_provider = value;
+            else if (key == "model") tgpt_model = value;
+            else if (key == "api_key") tgpt_api_key = value;
+            else if (key == "custom_args") tgpt_custom_args = value;
+        }
+    }
+}
+
+void save_settings() {
+    std::string filepath = get_settings_dir() + "/config.txt";
+    std::ofstream ofs(filepath);
+    if (ofs.is_open()) {
+        ofs << "provider=" << tgpt_provider << "\n";
+        ofs << "model=" << tgpt_model << "\n";
+        ofs << "api_key=" << tgpt_api_key << "\n";
+        ofs << "custom_args=" << tgpt_custom_args << "\n";
+    }
+}
 
 } // namespace tgpt

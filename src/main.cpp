@@ -8,6 +8,8 @@
 using namespace tgpt;
 
 int main(int argc, char **argv) {
+    tgpt::load_settings();
+
 #ifdef _WIN32
     // FLTK bypasses Windows font-linking, so we must pick a font that explicitly 
     // contains Hindi/Devanagari glyphs + English. Nirmala UI is the Windows standard for this.
@@ -15,7 +17,7 @@ int main(int argc, char **argv) {
 #else
     // On lightweight distros like AntiX, the default "sans" alias might not link to 
     // a Hindi font by default. Fontconfig naturally accepts comma-separated fallbacks!
-    Fl::set_font(FL_HELVETICA, "sans,FreeSans,Noto Sans,Lohit Devanagari");
+    Fl::set_font(FL_HELVETICA, "sans,FreeSans,Noto Sans,Lohit Devanagari,Nirmala UI");
 #endif
 
     main_window = new Fl_Window(750, 630, "tgpt Lightweight GUI");
@@ -24,15 +26,20 @@ int main(int argc, char **argv) {
     menubar->add("File/Load Chat", 0, load_chat_file_cb);
     menubar->add("File/Close Chat", 0, close_chat_cb);
     menubar->add("File/Exit", 0, exit_cb);
+    menubar->add("Settings/tgpt-cli", 0, settings_cb);
     menubar->add("History/Last 5 Chats",  0, limit_cb, (void*)(intptr_t)5);
     menubar->add("History/Last 10 Chats", 0, limit_cb, (void*)(intptr_t)10);
     menubar->add("History/Last 20 Chats", 0, limit_cb, (void*)(intptr_t)20);
+    menubar->add("Help/About", 0, about_cb);
+    menubar->add("Help/Updates", 0, updates_cb);
 
     // Output area
     output_box = new Fl_Help_View(10, 35, 730, 420);
+    output_box->textfont(FL_HELVETICA);
 
     // Input area
     input_box = new Fl_Multiline_Input(10, 465, 580, 90);
+    input_box->textfont(FL_HELVETICA);
     input_box->wrap(1);
     input_box->when(FL_WHEN_ENTER_KEY_ALWAYS);
     input_box->callback([](Fl_Widget*, void*) {

@@ -3,8 +3,49 @@
 
 #include <cctype>
 #include <sstream>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <unistd.h>
+#include <cstdlib>
 
 namespace tgpt {
+
+void ensure_directory_exists(const std::string& path) {
+    struct stat st = {0};
+    if (stat(path.c_str(), &st) == -1) {
+#ifdef _WIN32
+        mkdir(path.c_str());
+#else
+        mkdir(path.c_str(), 0700);
+#endif
+    }
+}
+
+std::string get_app_dir() {
+    const char *homedir = getenv("HOME");
+    if (!homedir) {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw) homedir = pw->pw_dir;
+    }
+    if (!homedir) return ".tgpt-gui"; // Fallback to local
+    
+    std::string dir = std::string(homedir) + "/.tgpt-gui";
+    ensure_directory_exists(dir);
+    return dir;
+}
+
+std::string get_chats_dir() {
+    std::string dir = get_app_dir() + "/chats";
+    ensure_directory_exists(dir);
+    return dir;
+}
+
+std::string get_settings_dir() {
+    std::string dir = get_app_dir() + "/settings";
+    ensure_directory_exists(dir);
+    return dir;
+}
 
 std::string sanitize_output(const std::string& raw) {
     std::string out;
