@@ -565,9 +565,13 @@ int global_handler(int event) {
 // ----------------------------------------------------------------------
 int main(int argc, char **argv) {
 #ifdef _WIN32
-    Fl::set_font(FL_HELVETICA, "Segoe UI");
+    // FLTK bypasses Windows font-linking, so we must pick a font that explicitly 
+    // contains Hindi/Devanagari glyphs + English. Nirmala UI is the Windows standard for this.
+    Fl::set_font(FL_HELVETICA, "Nirmala UI");
 #else
-    Fl::set_font(FL_HELVETICA, "Arial");
+    // On lightweight distros like AntiX, the default "sans" alias might not link to 
+    // a Hindi font by default. Fontconfig naturally accepts comma-separated fallbacks!
+    Fl::set_font(FL_HELVETICA, "sans,FreeSans,Noto Sans,Lohit Devanagari");
 #endif
 
     main_window = new Fl_Window(750, 630, "tgpt Lightweight GUI");
