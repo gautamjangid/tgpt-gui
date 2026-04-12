@@ -6,7 +6,10 @@
 #include <FL/Fl_Output.H>
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Menu_Bar.H>
+#include <FL/Fl_Native_File_Chooser.H>
 #include <FL/fl_ask.H>
+
+#include <ctime>
 
 #include <string>
 #include <vector>
@@ -60,7 +63,12 @@ std::string sanitize_output(const std::string& raw) {
             if (last_nl == std::string::npos) out.clear();
             else out.resize(last_nl + 1);
         } else if (raw[i] == '\b') {
-            if (!out.empty() && out.back() != '\n') out.pop_back();
+            if (!out.empty() && out.back() != '\n') {
+                while (!out.empty() && (out.back() & 0xC0) == 0x80) {
+                    out.pop_back();
+                }
+                if (!out.empty()) out.pop_back();
+            }
         } else {
             out += raw[i];
         }
@@ -85,25 +93,61 @@ std::string current_response_raw;
 int history_limit = 5;
 
 // Chat History State
+// Chat History State
 std::deque<std::pair<std::string, std::string>> chat_history; // {prompt, response}
+std::string current_history_filepath = "";
+void redraw_chat_window();
 
 // ----------------------------------------------------------------------
 // History File Management
 // ----------------------------------------------------------------------
-std::string get_history_filepath() {
+std::string get_history_filename_for_today() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+    time (&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d-tgpt-chat.html", timeinfo);
+    
+    std::string filename = std::string(buffer);
     const char *homedir = getenv("HOME");
     if (!homedir) {
         struct passwd *pw = getpwuid(getuid());
         if (pw) homedir = pw->pw_dir;
     }
-    if (!homedir) return ".tgpt_history.txt"; // fallback to current dir
-    return std::string(homedir) + "/.tgpt_history.txt";
+    if (!homedir) return filename; 
+    return std::string(homedir) + "/" + filename;
 }
 
+std::string get_active_history_filepath() {
+    if (current_history_filepath.empty()) {
+        current_history_filepath = get_history_filename_for_today();
+    }
+    return current_history_filepath;
+}
+
+// Forward declarations
+std::string escape_html(const std::string& data);
+std::string parse_markdown_to_html(const std::string& md, bool clear_blocks = true);
+
 void save_history_entry(const std::string& prompt, const std::string& response) {
-    std::ofstream ofs(get_history_filepath(), std::ios::app);
+    std::string filepath = get_active_history_filepath();
+    bool file_exists = (access(filepath.c_str(), F_OK) == 0);
+    std::ofstream ofs(filepath, std::ios::app);
     if (ofs.is_open()) {
-        ofs << "[USER]\n" << prompt << "\n[TGPT]\n" << response << "\n";
+        if (!file_exists) {
+            ofs << "<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>tgpt chat</title></head>\n<body style=\"font-family: sans-serif; background-color: #ffffff;\">\n";
+        }
+        
+        // Hide the raw data inside HTML comments for robust parsing
+        ofs << "<!-- RAW_PROMPT_START\n" << prompt << "\nRAW_PROMPT_END -->\n";
+        ofs << "<!-- RAW_RESPONSE_START\n" << response << "\nRAW_RESPONSE_END -->\n";
+        
+        ofs << "<div style='color:#0000aa; margin-bottom:10px;'><b>You:</b><br>\n";
+        ofs << escape_html(prompt) << "\n</div>\n";
+        
+        ofs << "<div style='color:#00aa00; margin-bottom:20px;'><b>tgpt:</b><br>\n";
+        ofs << parse_markdown_to_html(response, false) << "\n</div>\n<hr>\n";
     }
 }
 
@@ -262,7 +306,7 @@ void redraw_chat_window() {
 
 // Load limited history
 void load_history_cb(Fl_Widget*, void*) {
-    std::ifstream ifs(get_history_filepath());
+    std::ifstream ifs(get_active_history_filepath());
     chat_history.clear();
     
     if (!ifs.is_open()) {
@@ -272,10 +316,10 @@ void load_history_cb(Fl_Widget*, void*) {
 
     std::vector<std::pair<std::string, std::string>> all_entries;
     std::string line, current_prompt, current_response;
-    int state = 0; // 0=none, 1=user, 2=tgpt
+    int state = 0; // 0=none, 1=user(txt), 2=tgpt(txt), 3=user(html), 4=tgpt(html)
 
     while (std::getline(ifs, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back(); // CR fix
+        if (!line.empty() && line.back() == '\r') line.pop_back();
 
         if (line == "[USER]") {
             if (state == 2 || state == 1) {
@@ -286,17 +330,33 @@ void load_history_cb(Fl_Widget*, void*) {
             state = 1;
         } else if (line == "[TGPT]") {
             state = 2;
+        } else if (line == "<!-- RAW_PROMPT_START") {
+            if (state == 4 || state == 3) {
+                if(state == 4) all_entries.push_back({current_prompt, current_response});
+                current_prompt.clear();
+                current_response.clear();
+            }
+            state = 3;
+        } else if (line == "RAW_PROMPT_END -->") {
+            state = 0;
+        } else if (line == "<!-- RAW_RESPONSE_START") {
+            state = 4;
+        } else if (line == "RAW_RESPONSE_END -->") {
+            all_entries.push_back({current_prompt, current_response});
+            current_prompt.clear();
+            current_response.clear();
+            state = 0;
         } else {
-            if (state == 1) {
+            if (state == 1 || state == 3) {
                 if (!current_prompt.empty()) current_prompt += "\n";
                 current_prompt += line;
-            } else if (state == 2) {
+            } else if (state == 2 || state == 4) {
                 if (!current_response.empty()) current_response += "\n";
                 current_response += line;
             }
         }
     }
-    if (state == 2 && !current_prompt.empty()) {
+    if ((state == 2 || state == 4) && !current_prompt.empty()) {
         all_entries.push_back({current_prompt, current_response});
     }
 
@@ -309,6 +369,34 @@ void load_history_cb(Fl_Widget*, void*) {
     redraw_chat_window();
 }
 
+void load_chat_file_cb(Fl_Widget*, void*) {
+    Fl_Native_File_Chooser fnfc;
+    fnfc.title("Load Chat File");
+    fnfc.type(Fl_Native_File_Chooser::BROWSE_FILE);
+    fnfc.filter("HTML Files\t*.html\nText Files\t*.txt\nAll Files\t*");
+    const char *homedir = getenv("HOME");
+    if (!homedir) {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw) homedir = pw->pw_dir;
+    }
+    if (homedir) fnfc.directory(homedir);
+
+    if ( fnfc.show() == 0 ) {
+        current_history_filepath = fnfc.filename();
+        load_history_cb(nullptr, nullptr);
+    }
+}
+
+void close_chat_cb(Fl_Widget*, void*) {
+    chat_history.clear();
+    current_history_filepath = get_history_filename_for_today();
+    redraw_chat_window();
+}
+
+void exit_cb(Fl_Widget*, void*) {
+    exit(0);
+}
+
 // ----------------------------------------------------------------------
 // Copy selected code block
 // ----------------------------------------------------------------------
@@ -317,13 +405,7 @@ void copy_block_by_index(int idx) {
 
     const std::string& code = all_code_blocks[idx].code;
 
-    FILE* pipe = popen("xclip -selection clipboard", "w");
-    if (pipe) {
-        fwrite(code.c_str(), 1, code.size(), pipe);
-        pclose(pipe);
-    } else {
-        Fl::copy(code.c_str(), code.size(), 1);
-    }
+    Fl::copy(code.c_str(), (int)code.size(), 1);
 
     btn_copy->label("Copied block!");
     Fl::add_timeout(1.5, [](void* v) {
@@ -482,12 +564,21 @@ int global_handler(int event) {
 // Main
 // ----------------------------------------------------------------------
 int main(int argc, char **argv) {
+#ifdef _WIN32
+    Fl::set_font(FL_HELVETICA, "Segoe UI");
+#else
+    Fl::set_font(FL_HELVETICA, "Arial");
+#endif
+
     main_window = new Fl_Window(750, 630, "tgpt Lightweight GUI");
     
     Fl_Menu_Bar *menubar = new Fl_Menu_Bar(0, 0, 750, 25);
-    menubar->add("History/Load Last 5 Chats",  0, limit_cb, (void*)(intptr_t)5);
-    menubar->add("History/Load Last 10 Chats", 0, limit_cb, (void*)(intptr_t)10);
-    menubar->add("History/Load Last 20 Chats", 0, limit_cb, (void*)(intptr_t)20);
+    menubar->add("File/Load Chat", 0, load_chat_file_cb);
+    menubar->add("File/Close Chat", 0, close_chat_cb);
+    menubar->add("File/Exit", 0, exit_cb);
+    menubar->add("History/Last 5 Chats",  0, limit_cb, (void*)(intptr_t)5);
+    menubar->add("History/Last 10 Chats", 0, limit_cb, (void*)(intptr_t)10);
+    menubar->add("History/Last 20 Chats", 0, limit_cb, (void*)(intptr_t)20);
 
     // Output area
     output_box = new Fl_Help_View(10, 35, 730, 420);
@@ -501,11 +592,14 @@ int main(int argc, char **argv) {
             send_cb(nullptr, nullptr);
     });
 
-    btn_send = new Fl_Button(600, 465, 140, 40, "Send");
+    btn_send = new Fl_Button(600, 465, 140, 35, "Send");
     btn_send->callback(send_cb);
 
-    btn_cancel = new Fl_Button(600, 510, 140, 25, "Cancel");
+    btn_cancel = new Fl_Button(600, 505, 140, 25, "Cancel");
     btn_cancel->callback(cancel_cb);
+
+    Fl_Button *btn_clear = new Fl_Button(600, 535, 140, 25, "Clear Chat");
+    btn_clear->callback(close_chat_cb);
 
     Fl_Output *lbl = new Fl_Output(600, 570, 50, 25, "Block:");
     lbl->box(FL_NO_BOX);
