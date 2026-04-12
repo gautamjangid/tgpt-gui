@@ -171,7 +171,7 @@ std::string escape_html(const std::string& data) {
 // ----------------------------------------------------------------------
 // Markdown to HTML (extracts code blocks)
 // ----------------------------------------------------------------------
-std::string parse_markdown_to_html(const std::string& md, bool clear_blocks = true) {
+std::string parse_markdown_to_html(const std::string& md, bool clear_blocks) {
     if (clear_blocks) {
         all_code_blocks.clear();
     }
