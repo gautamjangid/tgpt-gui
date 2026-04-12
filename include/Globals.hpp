@@ -57,6 +57,7 @@ extern std::deque<std::pair<std::string, std::string>> chat_history; // {prompt,
 extern std::string current_history_filepath;
 
 // Settings State
+extern const std::string APP_VERSION;
 extern std::string tgpt_provider;
 extern std::string tgpt_model;
 extern std::string tgpt_api_key;

@@ -47,6 +47,16 @@ Once installed, you can launch the application by:
    tgpt-gui
    ```
 
+## How to use tgpt-cli Settings
+
+`tgpt-gui` provides an integrated interface to configure the underlying AI runtime natively directly from the GUI (found under **Settings -> tgpt-cli**).
+
+*   **Provider:** Determines which backend service handles your chat queries. Free providers (such as `duckduckgo`, `phind`, `ollama`) are immediately accessible and require no extra setup. If you select one of these, the Model and API Key inputs will deactivate since they aren't needed.
+*   **Model:** Specifies the exact neural network to query. This is typically only required if you use a top-tier provider like `openai`.
+*   **API Key:** An authenticated token required for premium endpoints like OpenAI or Anthropic. Leave this empty if you are using free providers.
+
+*(Hint: If you're unsure where to begin, simply leave all settings blank to default securely to the baseline free provider!)*
+
 ## Uninstallation
 
 To completely remove the application and its dependencies, run the provided uninstaller script:
