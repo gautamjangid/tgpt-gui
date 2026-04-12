@@ -38,14 +38,10 @@ int main(int argc, char **argv) {
     output_box->textfont(FL_HELVETICA);
 
     // Input area
-    input_box = new Fl_Multiline_Input(10, 465, 580, 90);
+    input_box = new ChatInput(10, 465, 580, 90);
     input_box->textfont(FL_HELVETICA);
     input_box->wrap(1);
-    input_box->when(FL_WHEN_ENTER_KEY_ALWAYS);
-    input_box->callback([](Fl_Widget*, void*) {
-        if (Fl::event_key() == FL_Enter && Fl::event_ctrl())
-            send_cb(nullptr, nullptr);
-    });
+    input_box->callback(send_cb);
 
     btn_send = new Fl_Button(600, 465, 140, 35, "Send");
     btn_send->callback(send_cb);

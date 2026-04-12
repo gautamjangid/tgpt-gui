@@ -46,4 +46,14 @@ Once installed, you can launch the application by:
    ```bash
    tgpt-gui
    ```
-    
+
+## Uninstallation
+
+To completely remove the application and its dependencies, run the provided uninstaller script:
+
+```bash
+chmod +x scripts/uninstall.sh
+./scripts/uninstall.sh
+```
+
+You'll be prompted to optionally clear out chat history (`~/.tgpt-gui`) and remove underlying dependencies (like FLTK or the core `tgpt` CLI) if you don't use them anywhere else within your system.

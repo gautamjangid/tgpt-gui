@@ -4,9 +4,21 @@
 
 namespace tgpt {
 
+int ChatInput::handle(int e) {
+    if (e == FL_KEYBOARD && Fl::event_key() == FL_Enter) {
+        if (Fl::event_state() & FL_SHIFT) {
+            return Fl_Multiline_Input::handle(e);
+        } else {
+            this->do_callback();
+            return 1;
+        }
+    }
+    return Fl_Multiline_Input::handle(e);
+}
+
 // UI Components
 Fl_Window          *main_window = nullptr;
-Fl_Multiline_Input *input_box = nullptr;
+ChatInput          *input_box = nullptr;
 Fl_Help_View       *output_box = nullptr;
 Fl_Button          *btn_send   = nullptr;
 Fl_Button          *btn_copy   = nullptr;

@@ -9,6 +9,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <FL/Fl_Input.H>
+#include <FL/Fl_Input_Choice.H>
 
 namespace tgpt {
 
@@ -136,12 +137,9 @@ void load_chat_file_cb(Fl_Widget*, void*) {
     fnfc.title("Load Chat File");
     fnfc.type(Fl_Native_File_Chooser::BROWSE_FILE);
     fnfc.filter("HTML Files\t*.html\nText Files\t*.txt\nAll Files\t*");
-    const char *homedir = getenv("HOME");
-    if (!homedir) {
-        struct passwd *pw = getpwuid(getuid());
-        if (pw) homedir = pw->pw_dir;
-    }
-    if (homedir) fnfc.directory(homedir);
+    
+    std::string chats_dir = get_chats_dir();
+    fnfc.directory(chats_dir.c_str());
 
     if ( fnfc.show() == 0 ) {
         current_history_filepath = fnfc.filename();
@@ -161,8 +159,8 @@ void exit_cb(Fl_Widget*, void*) {
 
 struct SettingsDialogData {
     Fl_Window* win;
-    Fl_Input* inp_provider;
-    Fl_Input* inp_model;
+    Fl_Input_Choice* inp_provider;
+    Fl_Input_Choice* inp_model;
     Fl_Input* inp_apikey;
     Fl_Input* inp_args;
 };
@@ -183,10 +181,22 @@ void settings_cb(Fl_Widget*, void*) {
     SettingsDialogData* data = new SettingsDialogData();
     data->win = new Fl_Window(400, 250, "tgpt-cli Settings");
     
-    data->inp_provider = new Fl_Input(120, 20, 260, 30, "Provider:");
+    data->inp_provider = new Fl_Input_Choice(120, 20, 260, 30, "Provider:");
+    data->inp_provider->add("openai");
+    data->inp_provider->add("phind");
+    data->inp_provider->add("koboldai");
+    data->inp_provider->add("ollama");
+    data->inp_provider->add("groq");
+    data->inp_provider->add("blackbox");
+    data->inp_provider->add("duckduckgo");
+    data->inp_provider->add("perplexity");
     data->inp_provider->value(tgpt_provider.c_str());
     
-    data->inp_model = new Fl_Input(120, 60, 260, 30, "Model:");
+    data->inp_model = new Fl_Input_Choice(120, 60, 260, 30, "Model:");
+    data->inp_model->add("gpt-4o");
+    data->inp_model->add("claude-3-opus");
+    data->inp_model->add("llama-3");
+    data->inp_model->add("mixtral-8x7b");
     data->inp_model->value(tgpt_model.c_str());
     
     data->inp_apikey = new Fl_Input(120, 100, 260, 30, "API Key:");
@@ -200,19 +210,47 @@ void settings_cb(Fl_Widget*, void*) {
     btn_save->callback(settings_save_cb, data);
     
     data->win->end();
+    int center_x = main_window->x() + (main_window->w() - 400) / 2;
+    int center_y = main_window->y() + (main_window->h() - 250) / 2;
+    data->win->position(center_x, center_y);
     data->win->show();
 }
 
+static void close_win_cb(Fl_Widget* w, void* v) {
+    Fl_Window* win = (Fl_Window*)v;
+    win->hide();
+    delete win;
+}
+
 void about_cb(Fl_Widget*, void*) {
-    fl_message("tgpt Lightweight GUI v1.0.4\nAuthor: Gautam Jangid");
+    Fl_Window* win = new Fl_Window(300, 150, "About");
+    Fl_Box* box = new Fl_Box(10, 10, 280, 80, "tgpt Lightweight GUI v1.0.4\nAuthor: Gautam Jangid");
+    Fl_Button* btn = new Fl_Button(110, 100, 80, 30, "OK");
+    btn->callback(close_win_cb, win);
+    win->end();
+    
+    int center_x = main_window->x() + (main_window->w() - 300) / 2;
+    int center_y = main_window->y() + (main_window->h() - 150) / 2;
+    win->position(center_x, center_y);
+    win->show();
 }
 
 void updates_cb(Fl_Widget*, void*) {
-    fl_message("To update to the latest version, run:\n\n"
-               "git clone -b main https://github.com/gautamjangid/tgpt-gui.git\n"
-               "cd tgpt-gui/scripts\n"
-               "chmod +x install.sh\n"
-               "./install.sh");
+    Fl_Window* win = new Fl_Window(500, 200, "Updates");
+    Fl_Help_View* hv = new Fl_Help_View(10, 10, 480, 130);
+    hv->value("To update to the latest version, run:<br><br>"
+              "<font face='monospace'>git clone -b main https://github.com/gautamjangid/tgpt-gui.git<br>"
+              "cd tgpt-gui/scripts<br>"
+              "chmod +x install.sh<br>"
+              "./install.sh</font>");
+    Fl_Button* btn = new Fl_Button(210, 150, 80, 30, "OK");
+    btn->callback(close_win_cb, win);
+    win->end();
+    
+    int center_x = main_window->x() + (main_window->w() - 500) / 2;
+    int center_y = main_window->y() + (main_window->h() - 200) / 2;
+    win->position(center_x, center_y);
+    win->show();
 }
 
 void copy_block_by_index(int idx) {
