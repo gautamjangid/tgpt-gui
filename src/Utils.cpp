@@ -1,0 +1,135 @@
+#include "Utils.hpp"
+#include "Globals.hpp"
+
+#include <cctype>
+#include <sstream>
+
+namespace tgpt {
+
+std::string sanitize_output(const std::string& raw) {
+    std::string out;
+    bool in_ansi = false;
+    for (size_t i = 0; i < raw.length(); ++i) {
+        if (raw[i] == '\033') {
+            in_ansi = true;
+            if (i + 1 < raw.length() && raw[i+1] == '[') {
+                i++;
+                while (i + 1 < raw.length() && !std::isalpha(raw[i+1])) i++;
+                if (i + 1 < raw.length()) i++;
+            }
+            in_ansi = false;
+            continue;
+        }
+        if (in_ansi) continue;
+
+        if (raw[i] == '\r') {
+            size_t last_nl = out.find_last_of('\n');
+            if (last_nl == std::string::npos) out.clear();
+            else out.resize(last_nl + 1);
+        } else if (raw[i] == '\b') {
+            if (!out.empty() && out.back() != '\n') {
+                while (!out.empty() && (out.back() & 0xC0) == 0x80) {
+                    out.pop_back();
+                }
+                if (!out.empty()) out.pop_back();
+            }
+        } else {
+            out += raw[i];
+        }
+    }
+    return out;
+}
+
+std::string escape_html(const std::string& data) {
+    std::string buffer;
+    buffer.reserve(data.size() * 1.2);
+    for (char c : data) {
+        switch (c) {
+            case '<':  buffer += "&lt;"; break;
+            case '>':  buffer += "&gt;"; break;
+            case '&':  buffer += "&amp;"; break;
+            default:   buffer += c; break;
+        }
+    }
+    return buffer;
+}
+
+std::string parse_markdown_to_html(const std::string& md, bool clear_blocks) {
+    if (clear_blocks) {
+        all_code_blocks.clear();
+    }
+    std::ostringstream html;
+
+    std::istringstream stream(md);
+    std::string line;
+    bool in_code_block = false;
+    std::string current_block_text;
+    std::string current_lang;
+
+    while (std::getline(stream, line)) {
+        if (line.length() >= 3 && line.substr(0, 3) == "```") {
+            in_code_block = !in_code_block;
+            if (in_code_block) {
+                current_block_text.clear();
+                current_lang = line.substr(3); 
+                
+                size_t first = current_lang.find_first_not_of(" \t\r\n");
+                if (std::string::npos == first) {
+                    current_lang = "Code";
+                } else {
+                    size_t last = current_lang.find_last_not_of(" \t\r\n");
+                    current_lang = current_lang.substr(first, (last - first + 1));
+                }
+
+                html << "<br><table bgcolor='#2d2d2d' width='100%'><tr><td>"
+                     << "<b><font color='#a0a0a0'>" << escape_html(current_lang) << "</font></b><br>"
+                     << "<pre><font color='#ffffff'>";
+            } else {
+                if (clear_blocks) {
+                    all_code_blocks.push_back({current_lang, current_block_text});
+                }
+                html << "</font></pre></td></tr></table><br>";
+            }
+            continue;
+        }
+
+        if (in_code_block) {
+            current_block_text += line + "\n";
+            html << escape_html(line) << "\n";
+        } else {
+            // Heading formatting
+            if (line.compare(0, 2, "# ") == 0) line = "<h2>" + escape_html(line.substr(2)) + "</h2>";
+            else if (line.compare(0, 3, "## ") == 0) line = "<h3>" + escape_html(line.substr(3)) + "</h3>";
+            else if (line.compare(0, 4, "### ") == 0) line = "<h4>" + escape_html(line.substr(4)) + "</h4>";
+            else {
+                line = escape_html(line);
+            }
+            
+            // Bold formatting
+            size_t pos = 0;
+            while ((pos = line.find("**", pos)) != std::string::npos) {
+                size_t end = line.find("**", pos + 2);
+                if (end != std::string::npos) {
+                    line = line.substr(0, pos) + "<b>" + line.substr(pos + 2, end - (pos + 2)) + "</b>" + line.substr(end + 2);
+                    pos += 3;
+                } else break;
+            }
+
+            // Basic layout
+            if (line.empty()) html << "<br>";
+            else html << line << "<br>";
+        }
+    }
+    
+    // Close unclosed tags if streaming
+    if (in_code_block) {
+        html << "</font></pre></td></tr></table><br>";
+        if (clear_blocks) {
+            all_code_blocks.push_back({current_lang, current_block_text});
+        }
+    }
+
+    return html.str();
+}
+
+} // namespace tgpt

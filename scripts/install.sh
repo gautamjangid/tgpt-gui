@@ -42,20 +42,20 @@ echo "Installing FLTK dependencies..."
 $SUDO apt-get update
 $SUDO apt-get install -y build-essential libfltk1.3-dev xclip
 
-SOURCE_FILE="../src/main.cpp"
+SOURCE_DIR="../src"
 BINARY_NAME="tgpt-gui"
 
 # Ensure we're in the scripts directory or the paths will fail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 cd "$SCRIPT_DIR"
 
-if [ ! -f "$SOURCE_FILE" ]; then
-    echo "Error: $SOURCE_FILE not found."
+if [ ! -d "$SOURCE_DIR" ]; then
+    echo "Error: $SOURCE_DIR not found."
     exit 1
 fi
 
-echo "Compiling $SOURCE_FILE ..."
-g++ -std=c++14 -O2 "$SOURCE_FILE" -o "$BINARY_NAME" $(fltk-config --cxxflags --ldflags) -pthread
+echo "Compiling sources in $SOURCE_DIR ..."
+g++ -std=c++14 -O2 "$SOURCE_DIR"/*.cpp -I../include -o "$BINARY_NAME" $(fltk-config --cxxflags --ldflags) -pthread
 
 echo "Installing $BINARY_NAME to /usr/local/bin ..."
 $SUDO mv "$BINARY_NAME" /usr/local/bin/
