@@ -19,13 +19,7 @@ std::string get_history_filename_for_today() {
     strftime(buffer, sizeof(buffer), "%Y-%m-%d-tgpt-chat.html", timeinfo);
     
     std::string filename = std::string(buffer);
-    const char *homedir = getenv("HOME");
-    if (!homedir) {
-        struct passwd *pw = getpwuid(getuid());
-        if (pw) homedir = pw->pw_dir;
-    }
-    if (!homedir) return filename; 
-    return std::string(homedir) + "/" + filename;
+    return get_chats_dir() + "/" + filename;
 }
 
 std::string get_active_history_filepath() {
