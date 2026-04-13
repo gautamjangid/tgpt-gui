@@ -42,6 +42,7 @@ int history_limit = 5;
 std::deque<std::pair<std::string, std::string>> chat_history;
 std::string current_history_filepath = "";
 
+
 // Settings State
 const std::string APP_VERSION = "1.0.4";
 std::string tgpt_provider = "";

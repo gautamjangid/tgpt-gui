@@ -30,7 +30,7 @@ void redraw_chat_window() {
     int current_top = output_box->topline();
     std::ostringstream full_html;
     // FLTK 1.3 doesn't support CSS styles well, so we use traditional HTML tags
-    full_html << "<html><body><font face='sans-serif,FreeSans,Noto Sans,Lohit Devanagari,Nirmala UI' size='4'>";
+    full_html << "<html><body><font face='sans-serif' size='4'>";
     
     // 1. Current processing msg (if any) is the latest, so it goes at the absolute top
     if (processing && !current_response_raw.empty()) {
