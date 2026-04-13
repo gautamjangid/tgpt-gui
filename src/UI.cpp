@@ -181,12 +181,12 @@ void settings_save_cb(Fl_Widget*, void* v) {
 void provider_changed_cb(Fl_Widget*, void* v) {
     SettingsDialogData* data = (SettingsDialogData*)v;
     std::string val = data->inp_provider->value();
-    if (val == "phind" || val == "duckduckgo" || val == "koboldai" || val == "blackbox" || val == "perplexity" || val == "ollama") {
+    if (val == "koboldai" || val == "pollinations" || val == "sky") {
         data->inp_model->deactivate();
+        data->inp_apikey->deactivate();
         data->inp_apikey->deactivate();
     } else {
         data->inp_model->activate();
-        data->inp_apikey->activate();
     }
 }
 
@@ -195,13 +195,16 @@ void settings_cb(Fl_Widget*, void*) {
     data->win = new Fl_Window(400, 310, "tgpt-cli Settings");
     
     data->inp_provider = new Fl_Input_Choice(120, 20, 260, 30, "Provider:");
-    data->inp_provider->add("openai");
-    data->inp_provider->add("phind");
+    data->inp_provider->add("sky");
+    data->inp_provider->add("pollinations");
     data->inp_provider->add("koboldai");
+    data->inp_provider->add("openai");
+    data->inp_provider->add("gemini");
     data->inp_provider->add("ollama");
     data->inp_provider->add("groq");
-    data->inp_provider->add("blackbox");
+    data->inp_provider->add("deepseek");
     data->inp_provider->add("duckduckgo");
+    data->inp_provider->add("blackbox");
     data->inp_provider->add("perplexity");
     data->inp_provider->value(tgpt_provider.c_str());
     data->inp_provider->callback(provider_changed_cb, data);
