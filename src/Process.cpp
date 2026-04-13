@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <cerrno>
+#include <vector>
+#include <sstream>
 
 namespace tgpt {
 
@@ -95,7 +97,38 @@ void send_cb(Fl_Widget*, void*) {
         dup2(pipefd[1], STDERR_FILENO);
         close(pipefd[0]);
         close(pipefd[1]);
-        execlp("tgpt", "tgpt", prompt.c_str(), (char*)nullptr);
+
+        std::vector<char*> args;
+        args.push_back((char*)"tgpt");
+        if (!tgpt_provider.empty()) {
+            args.push_back((char*)"--provider");
+            args.push_back((char*)tgpt_provider.c_str());
+        }
+        if (!tgpt_model.empty()) {
+            args.push_back((char*)"--model");
+            args.push_back((char*)tgpt_model.c_str());
+        }
+        if (!tgpt_api_key.empty()) {
+            args.push_back((char*)"--key");
+            args.push_back((char*)tgpt_api_key.c_str());
+        }
+
+        std::vector<std::string> custom_args_storage;
+        if (!tgpt_custom_args.empty()) {
+            std::istringstream iss(tgpt_custom_args);
+            std::string arg;
+            while (iss >> arg) {
+                custom_args_storage.push_back(arg);
+            }
+            for (auto& st : custom_args_storage) {
+                args.push_back((char*)st.c_str());
+            }
+        }
+
+        args.push_back((char*)prompt.c_str());
+        args.push_back(nullptr);
+
+        execvp("tgpt", args.data());
         _exit(127);
     } else if (child_pid > 0) {
         close(pipefd[1]);

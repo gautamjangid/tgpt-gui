@@ -8,6 +8,9 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <cstdio>
+#include <FL/Fl_Input.H>
+#include <FL/Fl_Input_Choice.H>
 
 namespace tgpt {
 
@@ -135,12 +138,9 @@ void load_chat_file_cb(Fl_Widget*, void*) {
     fnfc.title("Load Chat File");
     fnfc.type(Fl_Native_File_Chooser::BROWSE_FILE);
     fnfc.filter("HTML Files\t*.html\nText Files\t*.txt\nAll Files\t*");
-    const char *homedir = getenv("HOME");
-    if (!homedir) {
-        struct passwd *pw = getpwuid(getuid());
-        if (pw) homedir = pw->pw_dir;
-    }
-    if (homedir) fnfc.directory(homedir);
+    
+    std::string chats_dir = get_chats_dir();
+    fnfc.directory(chats_dir.c_str());
 
     if ( fnfc.show() == 0 ) {
         current_history_filepath = fnfc.filename();
@@ -156,6 +156,208 @@ void close_chat_cb(Fl_Widget*, void*) {
 
 void exit_cb(Fl_Widget*, void*) {
     exit(0);
+}
+
+struct SettingsDialogData {
+    Fl_Window* win;
+    Fl_Input_Choice* inp_provider;
+    Fl_Input_Choice* inp_model;
+    Fl_Input* inp_apikey;
+    Fl_Input* inp_args;
+};
+
+void settings_save_cb(Fl_Widget*, void* v) {
+    SettingsDialogData* data = (SettingsDialogData*)v;
+    tgpt_provider = data->inp_provider->value();
+    tgpt_model    = data->inp_model->value();
+    tgpt_api_key  = data->inp_apikey->value();
+    tgpt_custom_args = data->inp_args->value();
+    tgpt::save_settings();
+    data->win->hide();
+    delete data->win;
+    delete data;
+}
+
+void provider_changed_cb(Fl_Widget*, void* v) {
+    SettingsDialogData* data = (SettingsDialogData*)v;
+    std::string val = data->inp_provider->value();
+    if (val == "koboldai" || val == "pollinations" || val == "sky") {
+        data->inp_model->deactivate();
+        data->inp_apikey->deactivate();
+        data->inp_apikey->deactivate();
+    } else {
+        data->inp_model->activate();
+    }
+}
+
+void settings_cb(Fl_Widget*, void*) {
+    SettingsDialogData* data = new SettingsDialogData();
+    data->win = new Fl_Window(400, 310, "tgpt-cli Settings");
+    
+    data->inp_provider = new Fl_Input_Choice(120, 20, 260, 30, "Provider:");
+    data->inp_provider->add("sky");
+    data->inp_provider->add("pollinations");
+    data->inp_provider->add("koboldai");
+    data->inp_provider->add("openai");
+    data->inp_provider->add("gemini");
+    data->inp_provider->add("ollama");
+    data->inp_provider->add("groq");
+    data->inp_provider->add("deepseek");
+    data->inp_provider->add("duckduckgo");
+    data->inp_provider->add("blackbox");
+    data->inp_provider->add("perplexity");
+    data->inp_provider->value(tgpt_provider.c_str());
+    data->inp_provider->callback(provider_changed_cb, data);
+    data->inp_provider->when(FL_WHEN_CHANGED | FL_WHEN_NOT_CHANGED);
+    
+    data->inp_model = new Fl_Input_Choice(120, 60, 260, 30, "Model:");
+    data->inp_model->add("gpt-4o");
+    data->inp_model->add("claude-3-opus");
+    data->inp_model->add("llama-3");
+    data->inp_model->add("mixtral-8x7b");
+    data->inp_model->value(tgpt_model.c_str());
+    
+    data->inp_apikey = new Fl_Input(120, 100, 260, 30, "API Key:");
+    data->inp_apikey->value(tgpt_api_key.c_str());
+    
+    data->inp_args = new Fl_Input(120, 140, 260, 30, "Extra Args:");
+    data->inp_args->tooltip("Space-separated args (e.g. -i -m)");
+    data->inp_args->value(tgpt_custom_args.c_str());
+    
+    Fl_Help_View* hv = new Fl_Help_View(10, 180, 380, 80);
+    hv->value("<font size='3' face='sans-serif'><b>Hint:</b> Free providers like 'phind'(default), 'koboldai', 'pollinations' and 'sky' do NOT require an API Key or Model selection. Providers like 'openai', 'gemini', 'groq' etc require an API Key. Leave Provider blank for default.</font>");
+    hv->box(FL_FLAT_BOX);
+    hv->color(data->win->color());
+    
+    Fl_Button* btn_save = new Fl_Button(150, 270, 100, 30, "Save");
+    btn_save->callback(settings_save_cb, data);
+    
+    provider_changed_cb(data->inp_provider, data); // initialize toggle state
+
+    data->win->end();
+    int center_x = main_window->x() + (main_window->w() - 400) / 2;
+    int center_y = main_window->y() + (main_window->h() - 310) / 2;
+    data->win->position(center_x, center_y);
+    data->win->show();
+}
+
+static void close_win_cb(Fl_Widget* w, void* v) {
+    Fl_Window* win = (Fl_Window*)v;
+    win->hide();
+    delete win;
+}
+
+void about_cb(Fl_Widget*, void*) {
+    Fl_Window* win = new Fl_Window(450, 350, "About / License");
+    Fl_Help_View* hv = new Fl_Help_View(10, 10, 430, 280);
+    hv->value(("<font face='sans-serif'><center>"
+              "<b>tgpt Lightweight GUI v" + APP_VERSION + "</b><br><br>"
+              "Author: Gautam Jangid<br><br><br>"
+              "<b>MIT License</b><br><br>"
+              "</center>"
+              "<div style='text-align: justify;'>"
+              "Copyright (c) 2024 Gautam Jangid<br><br>"
+              "Permission is hereby granted, free of charge, to any person obtaining a copy "
+              "of this software and associated documentation files (the \"Software\"), to deal "
+              "in the Software without restriction, including without limitation the rights "
+              "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell "
+              "copies of the Software, and to permit persons to whom the Software is "
+              "furnished to do so, subject to the following conditions:<br><br>"
+              "The above copyright notice and this permission notice shall be included in all "
+              "copies or substantial portions of the Software.<br><br>"
+              "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR "
+              "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, "
+              "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
+              "</div></font>").c_str());
+    Fl_Button* btn = new Fl_Button(185, 300, 80, 30, "OK");
+    btn->callback(close_win_cb, win);
+    win->end();
+    
+    int center_x = main_window->x() + (main_window->w() - 450) / 2;
+    int center_y = main_window->y() + (main_window->h() - 350) / 2;
+    win->position(center_x, center_y);
+    win->show();
+}
+
+std::string exec_curl(const char* cmd) {
+    char buffer[128];
+    std::string result = "";
+    FILE* pipe = popen(cmd, "r");
+    if (!pipe) return "error";
+    try {
+        while (fgets(buffer, sizeof buffer, pipe) != NULL) {
+            result += buffer;
+        }
+    } catch (...) {
+        pclose(pipe);
+        return "error";
+    }
+    pclose(pipe);
+    return result;
+}
+
+void run_updater_cb(Fl_Widget*, void* v) {
+    const char* cmd = "x-terminal-emulator -e \"bash -c 'cd /tmp && rm -rf tgpt-gui && git clone -b main https://github.com/gautamjangid/tgpt-gui.git && cd tgpt-gui/scripts && chmod +x install.sh && ./install.sh; echo Press Enter to exit; read'\" || "
+                      "gnome-terminal -- bash -c 'cd /tmp && rm -rf tgpt-gui && git clone -b main https://github.com/gautamjangid/tgpt-gui.git && cd tgpt-gui/scripts && chmod +x install.sh && ./install.sh; echo Press Enter to exit; read' || "
+                      "xterm -e \"bash -c 'cd /tmp && rm -rf tgpt-gui && git clone -b main https://github.com/gautamjangid/tgpt-gui.git && cd tgpt-gui/scripts && chmod +x install.sh && ./install.sh; echo Press Enter to exit; read'\" &";
+    system(cmd);
+    Fl_Window* win = (Fl_Window*)v;
+    win->hide();
+    delete win;
+}
+
+void updates_cb(Fl_Widget*, void*) {
+    Fl_Window* win = new Fl_Window(500, 300, "Updates");
+    Fl_Help_View* hv = new Fl_Help_View(10, 10, 480, 230);
+    hv->value("<font face='sans-serif'>Checking for updates... please wait.</font>");
+    
+    int center_x = main_window->x() + (main_window->w() - 500) / 2;
+    int center_y = main_window->y() + (main_window->h() - 300) / 2;
+    win->position(center_x, center_y);
+    win->show();
+    Fl::check(); 
+    
+    std::string raw = exec_curl("curl -s https://raw.githubusercontent.com/gautamjangid/tgpt-gui/main/src/Globals.cpp | grep 'APP_VERSION ='");
+    
+    std::string remote_version = "Unknown";
+    size_t first = raw.find('"');
+    if (first != std::string::npos) {
+        size_t second = raw.find('"', first + 1);
+        if (second != std::string::npos) {
+            remote_version = raw.substr(first + 1, second - first - 1);
+        }
+    }
+    
+    std::string html;
+    bool needs_update = false;
+    
+    if (remote_version == "Unknown") {
+        html = "<font color='red' face='sans-serif'><b>Failed to fetch latest version info. Please check your internet connection.</b></font><br><br>";
+    } else if (remote_version == APP_VERSION) {
+        html = "<font color='green' face='sans-serif'><b>Already Up to Date!</b></font><br><br><font face='sans-serif'>Current version: v" + APP_VERSION + "</font>";
+    } else {
+        html = "<font color='#CC0000' face='sans-serif'><b>New version available: v" + remote_version + "</b></font><br>"
+               "<font face='sans-serif'>Current version: v" + APP_VERSION + "</font><br><br>"
+               "<font face='sans-serif'>To update, click the 'Update Now' button below, which will download and compile the newest version inside a separate terminal.</font>";
+        needs_update = true;
+    }
+    
+    hv->value(html.c_str());
+    
+    if (needs_update) {
+        Fl_Button* btn_upd = new Fl_Button(140, 250, 100, 30, "Update Now");
+        btn_upd->callback(run_updater_cb, win);
+        Fl_Button* btn_close = new Fl_Button(260, 250, 80, 30, "Cancel");
+        btn_close->callback(close_win_cb, win);
+        win->add(btn_upd);
+        win->add(btn_close);
+    } else {
+        Fl_Button* btn = new Fl_Button(210, 250, 80, 30, "OK");
+        btn->callback(close_win_cb, win);
+        win->add(btn);
+    }
+    
+    win->redraw();
 }
 
 void copy_block_by_index(int idx) {

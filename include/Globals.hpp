@@ -24,9 +24,15 @@ struct CodeBlock {
     std::string code;
 };
 
+class ChatInput : public Fl_Multiline_Input {
+public:
+    ChatInput(int X, int Y, int W, int H, const char* L=0) : Fl_Multiline_Input(X,Y,W,H,L) {}
+    int handle(int e) override;
+};
+
 // UI Components
 extern Fl_Window          *main_window;
-extern Fl_Multiline_Input *input_box;
+extern ChatInput          *input_box;
 extern Fl_Help_View       *output_box;
 extern Fl_Button          *btn_send;
 extern Fl_Button          *btn_copy;
@@ -49,5 +55,15 @@ extern int current_code_idx;
 extern int history_limit;
 extern std::deque<std::pair<std::string, std::string>> chat_history; // {prompt, response}
 extern std::string current_history_filepath;
+
+// Settings State
+extern const std::string APP_VERSION;
+extern std::string tgpt_provider;
+extern std::string tgpt_model;
+extern std::string tgpt_api_key;
+extern std::string tgpt_custom_args;
+
+void load_settings();
+void save_settings();
 
 } // namespace tgpt
