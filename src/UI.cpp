@@ -225,7 +225,7 @@ void settings_cb(Fl_Widget*, void*) {
     data->inp_args->value(tgpt_custom_args.c_str());
     
     Fl_Help_View* hv = new Fl_Help_View(10, 180, 380, 80);
-    hv->value("<font size='3' face='sans-serif'><b>Hint:</b> Free providers like 'duckduckgo' or 'phind' do NOT require an API Key or Model selection. Providers like 'openai' require an API Key. Leave Provider blank for default.</font>");
+    hv->value("<font size='3' face='sans-serif'><b>Hint:</b> Free providers like 'phind'(default), 'koboldai', 'pollinations' and 'sky' do NOT require an API Key or Model selection. Providers like 'openai', 'gemini', 'groq' etc require an API Key. Leave Provider blank for default.</font>");
     hv->box(FL_FLAT_BOX);
     hv->color(data->win->color());
     
@@ -250,9 +250,12 @@ static void close_win_cb(Fl_Widget* w, void* v) {
 void about_cb(Fl_Widget*, void*) {
     Fl_Window* win = new Fl_Window(450, 350, "About / License");
     Fl_Help_View* hv = new Fl_Help_View(10, 10, 430, 280);
-    hv->value(("<font face='sans-serif'><b>tgpt Lightweight GUI v" + APP_VERSION + "</b><br>"
-              "Author: Gautam Jangid<br><br>"
+    hv->value(("<font face='sans-serif'><center>"
+              "<b>tgpt Lightweight GUI v" + APP_VERSION + "</b><br><br>"
+              "Author: Gautam Jangid<br><br><br>"
               "<b>MIT License</b><br><br>"
+              "</center>"
+              "<div style='text-align: justify;'>"
               "Copyright (c) 2024 Gautam Jangid<br><br>"
               "Permission is hereby granted, free of charge, to any person obtaining a copy "
               "of this software and associated documentation files (the \"Software\"), to deal "
@@ -265,7 +268,7 @@ void about_cb(Fl_Widget*, void*) {
               "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR "
               "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, "
               "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
-              "</font>").c_str());
+              "</div></font>").c_str());
     Fl_Button* btn = new Fl_Button(185, 300, 80, 30, "OK");
     btn->callback(close_win_cb, win);
     win->end();
