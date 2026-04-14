@@ -54,8 +54,49 @@ Once installed, you can launch the application by:
 *   **Provider:** Determines which backend service handles your chat queries. Free providers (such as `duckduckgo`, `phind`, `ollama`) are immediately accessible and require no extra setup. If you select one of these, the Model and API Key inputs will deactivate since they aren't needed.
 *   **Model:** Specifies the exact neural network to query. This is typically only required if you use a top-tier provider like `openai`.
 *   **API Key:** An authenticated token required for premium endpoints like OpenAI or Anthropic. Leave this empty if you are using free providers.
+*   **Extra Args:** Space-separated CLI flags passed directly to tgpt. Supports `-c`, `-s`, `-i` and other flags (see Advanced CLI Modes below).
 
 *(Hint: If you're unsure where to begin, simply leave all settings blank to default securely to the baseline free provider!)*
+
+## Advanced CLI Modes
+
+tgpt-gui fully supports tgpt's advanced CLI modes. Set these flags in **Settings → tgpt-cli → Extra Args**.
+
+### Code Mode (`-c`)
+
+Optimized for generating code. Output is rendered in a dark-themed code block with **preserved indentation and whitespace**.
+
+```
+Extra Args: -c
+Prompt: "write python code to draw a circle"
+```
+
+The generated code will appear in a styled `<pre>` block instead of being treated as markdown.
+
+### Shell Mode (`-s`)
+
+Generates shell commands from natural language. When tgpt suggests a command, a **popup dialog** will appear showing the command and asking for confirmation.
+
+```
+Extra Args: -s
+Prompt: "list all files in current directory"
+```
+
+- If you click **Yes**: the command executes and the output is saved to `~/.tgpt-gui/shell_output/` as a timestamped `.txt` file. A notification with the file path appears in the chat.
+- If you click **No**: the command is not executed.
+
+### Interactive Mode (`-i`)
+
+Starts a persistent conversation session where tgpt maintains context between prompts.
+
+```
+Extra Args: -i
+```
+
+- The first prompt starts the tgpt interactive process.
+- Subsequent prompts are sent to the **same running process**, preserving conversation context.
+- The session stays alive until you click **Cancel** or **Clear Chat**.
+- Response completion is auto-detected after a 2-second silence.
 
 ## Uninstallation
 
