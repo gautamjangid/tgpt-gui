@@ -29,7 +29,7 @@ std::string get_active_history_filepath() {
     return current_history_filepath;
 }
 
-void save_history_entry(const std::string& prompt, const std::string& response) {
+void save_history_entry(const std::string& prompt, const std::string& response, bool code_mode) {
     std::string filepath = get_active_history_filepath();
     bool file_exists = (access(filepath.c_str(), F_OK) == 0);
     std::ofstream ofs(filepath, std::ios::app);
@@ -40,13 +40,20 @@ void save_history_entry(const std::string& prompt, const std::string& response) 
         
         // Hide the raw data inside HTML comments for robust parsing
         ofs << "<!-- RAW_PROMPT_START\n" << prompt << "\nRAW_PROMPT_END -->\n";
+        if (code_mode) {
+            ofs << "<!-- MODE:code -->\n";
+        }
         ofs << "<!-- RAW_RESPONSE_START\n" << response << "\nRAW_RESPONSE_END -->\n";
         
         ofs << "<div style='color:#0000aa; margin-bottom:10px;'><b>You:</b><br>\n";
         ofs << escape_html(prompt) << "\n</div>\n";
         
         ofs << "<div style='color:#00aa00; margin-bottom:20px;'><b>tgpt:</b><br>\n";
-        ofs << parse_markdown_to_html(response, false) << "\n</div>\n<hr>\n";
+        if (code_mode) {
+            ofs << render_raw_code_html(response) << "\n</div>\n<hr>\n";
+        } else {
+            ofs << parse_markdown_to_html(response, false) << "\n</div>\n<hr>\n";
+        }
     }
 }
 

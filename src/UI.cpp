@@ -2,6 +2,7 @@
 #include "Globals.hpp"
 #include "Utils.hpp"
 #include "History.hpp"
+#include "Process.hpp"
 
 #include <pwd.h>
 #include <unistd.h>
@@ -35,7 +36,11 @@ void redraw_chat_window() {
     // 1. Current processing msg (if any) is the latest, so it goes at the absolute top
     if (processing && !current_response_raw.empty()) {
         full_html << "<font color='#00aa00'><b>tgpt (typing...):</b></font><br>";
-        full_html << parse_markdown_to_html(sanitize_output(current_response_raw), true) << "<br><hr><br>";
+        if (is_code_mode) {
+            full_html << render_raw_code_html(sanitize_output(current_response_raw)) << "<br><hr><br>";
+        } else {
+            full_html << parse_markdown_to_html(sanitize_output(current_response_raw), true) << "<br><hr><br>";
+        }
     } else if (processing) {
         full_html << "<font color='#00aa00'><b>tgpt:</b> <i>thinking...</i></font><br><br><hr><br>";
     }
@@ -45,11 +50,16 @@ void redraw_chat_window() {
         const auto& msg = *it;
         
         full_html << "<font color='#0000aa'><b>You:</b></font><br>";
-        full_html << escape_html(msg.first) << "<br><br>";
+        full_html << escape_html(msg.prompt) << "<br><br>";
         
         full_html << "<font color='#00aa00'><b>tgpt:</b></font><br>";
-        // Do not extract blocks for history renders to avoid messing up the current blocks
-        full_html << parse_markdown_to_html(msg.second, false) << "<br>";
+        if (msg.code_mode) {
+            // Render as raw code block preserving whitespace
+            full_html << render_raw_code_html(msg.response) << "<br>";
+        } else {
+            // Do not extract blocks for history renders to avoid messing up the current blocks
+            full_html << parse_markdown_to_html(msg.response, false) << "<br>";
+        }
         
         // Add separator if it's not the last loaded historical message
         if (std::next(it) != chat_history.rend()) {
@@ -78,8 +88,9 @@ void load_history_cb(Fl_Widget*, void*) {
         return;
     }
 
-    std::vector<std::pair<std::string, std::string>> all_entries;
+    std::vector<ChatEntry> all_entries;
     std::string line, current_prompt, current_response;
+    bool current_code_mode = false;
     int state = 0; // 0=none, 1=user(txt), 2=tgpt(txt), 3=user(html), 4=tgpt(html)
 
     while (std::getline(ifs, line)) {
@@ -87,28 +98,40 @@ void load_history_cb(Fl_Widget*, void*) {
 
         if (line == "[USER]") {
             if (state == 2 || state == 1) {
-                if(state == 2) all_entries.push_back({current_prompt, current_response});
+                if(state == 2) {
+                    ChatEntry e; e.prompt = current_prompt; e.response = current_response; e.code_mode = current_code_mode;
+                    all_entries.push_back(e);
+                }
                 current_prompt.clear();
                 current_response.clear();
+                current_code_mode = false;
             }
             state = 1;
         } else if (line == "[TGPT]") {
             state = 2;
         } else if (line == "<!-- RAW_PROMPT_START") {
             if (state == 4 || state == 3) {
-                if(state == 4) all_entries.push_back({current_prompt, current_response});
+                if(state == 4) {
+                    ChatEntry e; e.prompt = current_prompt; e.response = current_response; e.code_mode = current_code_mode;
+                    all_entries.push_back(e);
+                }
                 current_prompt.clear();
                 current_response.clear();
+                current_code_mode = false;
             }
             state = 3;
         } else if (line == "RAW_PROMPT_END -->") {
             state = 0;
+        } else if (line == "<!-- MODE:code -->") {
+            current_code_mode = true;
         } else if (line == "<!-- RAW_RESPONSE_START") {
             state = 4;
         } else if (line == "RAW_RESPONSE_END -->") {
-            all_entries.push_back({current_prompt, current_response});
+            ChatEntry e; e.prompt = current_prompt; e.response = current_response; e.code_mode = current_code_mode;
+            all_entries.push_back(e);
             current_prompt.clear();
             current_response.clear();
+            current_code_mode = false;
             state = 0;
         } else {
             if (state == 1 || state == 3) {
@@ -121,7 +144,8 @@ void load_history_cb(Fl_Widget*, void*) {
         }
     }
     if ((state == 2 || state == 4) && !current_prompt.empty()) {
-        all_entries.push_back({current_prompt, current_response});
+        ChatEntry e; e.prompt = current_prompt; e.response = current_response; e.code_mode = current_code_mode;
+        all_entries.push_back(e);
     }
 
     // Keep only last N entries based on history_limit
@@ -149,6 +173,12 @@ void load_chat_file_cb(Fl_Widget*, void*) {
 }
 
 void close_chat_cb(Fl_Widget*, void*) {
+    // Kill any active interactive session
+    if (processing || interactive_session_active) {
+        interactive_session_active = false;
+        is_interactive_mode = false;
+        finish_processing(true);
+    }
     chat_history.clear();
     current_history_filepath = get_history_filename_for_today();
     redraw_chat_window();
