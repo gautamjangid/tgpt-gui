@@ -31,7 +31,22 @@ bool needs_redraw = false;
 std::atomic<bool> processing{false};
 pid_t child_pid = 0;
 int child_pipe = -1;
+int child_stdin_pipe = -1;
 std::string current_response_raw;
+
+// Mode Flags
+bool is_code_mode = false;
+bool is_shell_mode = false;
+bool is_interactive_mode = false;
+bool interactive_session_active = false;
+
+// Shell mode state
+bool shell_prompt_shown = false;
+bool shell_save_output = false;
+size_t shell_response_start_pos = 0;
+
+// Interactive mode state
+bool current_response_saved = false;
 
 // Code Block State
 std::vector<CodeBlock> all_code_blocks;
@@ -39,7 +54,7 @@ int current_code_idx = -1;
 
 // Chat History State
 int history_limit = 5;
-std::deque<std::pair<std::string, std::string>> chat_history;
+std::deque<ChatEntry> chat_history;
 std::string current_history_filepath = "";
 
 

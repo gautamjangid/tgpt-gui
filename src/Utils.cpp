@@ -173,4 +173,35 @@ std::string parse_markdown_to_html(const std::string& md, bool clear_blocks) {
     return html.str();
 }
 
+std::string render_raw_code_html(const std::string& code) {
+    std::ostringstream html;
+    html << "<br><table bgcolor='#2d2d2d' width='100%'><tr><td>"
+         << "<b><font color='#a0a0a0'>Code Output</font></b><br>"
+         << "<pre><font color='#ffffff'>"
+         << escape_html(code)
+         << "</font></pre></td></tr></table><br>";
+    return html.str();
+}
+
+std::string strip_interactive_prompts(const std::string& text) {
+    std::string result = text;
+
+    // Common tgpt interactive prompt patterns (at end of output)
+    const char* prompts[] = {">>> ", "╰─> ", ">> ", ">>> "};
+    for (const char* p : prompts) {
+        std::string ps(p);
+        // Remove trailing prompt
+        while (result.size() >= ps.size() &&
+               result.compare(result.size() - ps.size(), ps.size(), ps) == 0) {
+            result.resize(result.size() - ps.size());
+        }
+    }
+
+    // Trim trailing whitespace/newlines
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' ')) {
+        result.pop_back();
+    }
+    return result;
+}
+
 } // namespace tgpt
