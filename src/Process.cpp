@@ -324,8 +324,8 @@ void send_cb(Fl_Widget*, void*) {
             }
         }
 
-        // For -i mode, don't pass prompt as CLI arg (it goes via stdin)
-        if (!is_interactive_mode) {
+        // For -i and -s modes, don't pass prompt as CLI arg (it goes via stdin)
+        if (!is_interactive_mode && !is_shell_mode) {
             args.push_back((char*)prompt.c_str());
         }
         args.push_back(nullptr);
@@ -347,6 +347,14 @@ void send_cb(Fl_Widget*, void*) {
             interactive_session_active = true;
             std::string msg = prompt + "\n";
             write(child_stdin_pipe, msg.c_str(), msg.size());
+        }
+        
+        // For -s mode, send the prompt via stdin and close the write end
+        if (is_shell_mode && child_stdin_pipe != -1) {
+            std::string msg = prompt + "\n";
+            write(child_stdin_pipe, msg.c_str(), msg.size());
+            close(child_stdin_pipe);
+            child_stdin_pipe = -1;
         }
     } else {
         close(pipefd[0]);
