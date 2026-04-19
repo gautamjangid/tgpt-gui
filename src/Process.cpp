@@ -13,6 +13,8 @@
 #include <sstream>
 #include <fstream>
 #include <FL/fl_ask.H>
+#include <stdlib.h>
+#include <termios.h>
 
 namespace tgpt {
 
@@ -234,6 +236,11 @@ void pipe_read_cb(int fd, void*) {
     char buffer[256];
     ssize_t bytes = read(fd, buffer, sizeof(buffer));
     if (bytes > 0) {
+        if (interactive_session_active && !processing) {
+            processing = true;
+            btn_send->deactivate();
+            current_response_raw.clear();
+        }
         current_response_raw.append(buffer, bytes);
         needs_redraw = true;
 
@@ -250,10 +257,26 @@ void pipe_read_cb(int fd, void*) {
             }
         }
 
-        // Interactive mode: reset response timeout on each data chunk
+        // Interactive mode: detect prompt indicator for smart timeout
         if (interactive_session_active) {
+            std::string sanitized = sanitize_output(current_response_raw);
+            bool prompt_detected = false;
+            const char* prompts[] = {">>> ", "╰─> ", ">> ", "tgpt:"};
+            for (const char* p : prompts) {
+                std::string ps(p);
+                if (sanitized.size() >= ps.size() &&
+                    sanitized.compare(sanitized.size() - ps.size(), ps.size(), ps) == 0) {
+                    prompt_detected = true;
+                    break;
+                }
+            }
+            
             Fl::remove_timeout(interactive_response_timeout_cb);
-            Fl::add_timeout(2.0, interactive_response_timeout_cb);
+            if (prompt_detected) {
+                Fl::add_timeout(0.5, interactive_response_timeout_cb);
+            } else {
+                Fl::add_timeout(120.0, interactive_response_timeout_cb);
+            }
         }
     } else if (bytes == 0 || (bytes == -1 && errno != EAGAIN && errno != EINTR)) {
         // Process ended
@@ -319,26 +342,49 @@ void send_cb(Fl_Widget*, void*) {
     }
 
     // --- Start new process ---
-    int pipefd[2];
-    if (pipe(pipefd) != 0) {
-        finish_processing(true);
-        return;
+    int pipefd[2] = {-1, -1};
+    int stdin_pipefd[2] = {-1, -1};
+
+    // Use POSIX PTY for interactive mode to prevent block-buffering and support TTY apps
+    if (is_interactive_mode) {
+        int master = posix_openpt(O_RDWR | O_NOCTTY);
+        if (master != -1) {
+            grantpt(master);
+            unlockpt(master);
+            int slave = open(ptsname(master), O_RDWR);
+            if (slave != -1) {
+                pipefd[0] = master;
+                pipefd[1] = slave;
+                stdin_pipefd[0] = slave;
+                stdin_pipefd[1] = master;
+                
+                struct termios ts;
+                tcgetattr(slave, &ts);
+                ts.c_oflag &= ~ONLCR; // Disable CRLF translation
+                ts.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
+                tcsetattr(slave, TCSANOW, &ts);
+            }
+        }
+    }
+
+    if (pipefd[0] == -1) {
+        if (pipe(pipefd) != 0) {
+            finish_processing(true);
+            return;
+        }
+        if (is_interactive_mode) {
+            if (pipe(stdin_pipefd) != 0) {
+                close(pipefd[0]);
+                close(pipefd[1]);
+                finish_processing(true);
+                return;
+            }
+        }
     }
     
     // Set non-blocking on read end
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
-
-    // Create stdin pipe for -i mode only
-    int stdin_pipefd[2] = {-1, -1};
-    if (is_interactive_mode) {
-        if (pipe(stdin_pipefd) != 0) {
-            close(pipefd[0]);
-            close(pipefd[1]);
-            finish_processing(true);
-            return;
-        }
-    }
     // For -s mode, no stdin pipe needed - stdin will be /dev/null
     // Set timeout to show dialog even if pattern detection fails
     if (is_shell_mode) {
