@@ -20,9 +20,9 @@ int main(int argc, char **argv) {
     Fl::set_font(FL_HELVETICA, "sans,FreeSans,Noto Sans,Lohit Devanagari,Nirmala UI");
 #endif
 
-    main_window = new Fl_Window(750, 630, "tgpt Lightweight GUI");
+    main_window = new Fl_Window(800, 630, "tgpt Lightweight GUI");
     
-    Fl_Menu_Bar *menubar = new Fl_Menu_Bar(0, 0, 750, 25);
+    Fl_Menu_Bar *menubar = new Fl_Menu_Bar(0, 0, 800, 25);
     menubar->add("File/Load Chat", 0, load_chat_file_cb);
     menubar->add("File/Close Chat", 0, close_chat_cb);
     menubar->add("File/Exit", 0, exit_cb);
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     menubar->add("Help/Updates", 0, updates_cb);
 
     // Output area
-    output_box = new Fl_Help_View(10, 35, 730, 420);
+    output_box = new Fl_Help_View(10, 35, 780, 420);
     output_box->textfont(FL_HELVETICA);
 
     // Input area
@@ -54,14 +54,18 @@ int main(int argc, char **argv) {
 
     Fl_Output *lbl = new Fl_Output(600, 570, 50, 25, "Block:");
     lbl->box(FL_NO_BOX);
-    code_counter = new Fl_Output(650, 570, 100, 25);
+    code_counter = new Fl_Output(650, 570, 80, 25);
     code_counter->value("0");
+
+    btn_prev = new Fl_Button(730, 570, 25, 25, "@<-");
+    btn_prev->callback(prev_code_cb);
+    btn_prev->tooltip("Previous code block");
 
     btn_next = new Fl_Button(755, 570, 25, 25, "@->");
     btn_next->callback(next_code_cb);
     btn_next->tooltip("Next code block");
 
-    btn_copy = new Fl_Button(600, 600, 140, 25, "Copy Selected");
+    btn_copy = new Fl_Button(600, 600, 180, 25, "Copy Selected");
     btn_copy->callback(copy_cb);
 
     main_window->resizable(output_box);

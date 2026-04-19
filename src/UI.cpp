@@ -409,6 +409,14 @@ void copy_cb(Fl_Widget*, void*) {
     }
 }
 
+void prev_code_cb(Fl_Widget*, void*) {
+    if (all_code_blocks.size() < 2) return;
+    current_code_idx = (current_code_idx - 1 + all_code_blocks.size()) % all_code_blocks.size();
+    static char buf[64];
+    snprintf(buf, sizeof(buf), "%s (%d/%d)", all_code_blocks[current_code_idx].lang.c_str(), current_code_idx + 1, (int)all_code_blocks.size());
+    code_counter->value(buf);
+}
+
 void next_code_cb(Fl_Widget*, void*) {
     if (all_code_blocks.size() < 2) return;
     current_code_idx = (current_code_idx + 1) % all_code_blocks.size();
