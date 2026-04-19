@@ -460,7 +460,30 @@ void copy_block_by_index(int idx) {
     }, btn_copy);
 }
 
+class DummyPaster : public Fl_Widget {
+public:
+    DummyPaster() : Fl_Widget(0,0,0,0) {}
+    int handle(int e) override {
+        if (e == FL_PASTE && Fl::event_length() > 0) {
+            Fl::copy(Fl::event_text(), Fl::event_length(), 1);
+            btn_copy->label("Copied text!");
+            Fl::add_timeout(1.5, [](void* v) { ((Fl_Button*)v)->label("Copy Selected"); }, btn_copy);
+            return 1;
+        }
+        return 0;
+    }
+};
+static DummyPaster* dummy_paster = nullptr;
+
 void copy_cb(Fl_Widget*, void*) {
+    Fl_Widget* owner = Fl::selection_owner();
+    if (owner && (owner == output_box || output_box->contains(owner))) {
+        if (!dummy_paster) dummy_paster = new DummyPaster();
+        Fl::paste(*dummy_paster, 0);
+        return;
+    }
+    
+    // Fallback: Copy the currently focused code block
     if (current_code_idx != -1) {
         copy_block_by_index(current_code_idx);
     }
