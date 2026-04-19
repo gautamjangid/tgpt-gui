@@ -42,8 +42,21 @@ static int help_view_handler(int ev) {
         
             if (picked) {
                 if (strcmp(picked->label(), "&Copy All") == 0) {
-                    // Copy all text to clipboard
-                    Fl::copy(output_box->value(), (int)strlen(output_box->value()), 1);
+                    // Copy all text to clipboard as plain text
+                    std::string copy_text;
+                    for (const auto& msg : chat_history) {
+                        copy_text += "You:\n" + msg.prompt + "\n\n";
+                        copy_text += "tgpt:\n" + msg.response + "\n\n";
+                    }
+                    if (processing && !current_response_raw.empty()) {
+                        copy_text += "tgpt:\n" + sanitize_output(current_response_raw) + "\n\n";
+                    }
+                    
+                    // Give focus to window to ensure X11 clipboard captures it securely
+                    Fl::focus(main_window);
+                    static std::string safe_clip_buffer;
+                    safe_clip_buffer = copy_text;
+                    Fl::copy(safe_clip_buffer.c_str(), (int)safe_clip_buffer.length(), 1);
                 }
             }
             return 1; // handled
@@ -70,6 +83,8 @@ void redraw_chat_window() {
     if (processing && !current_response_raw.empty()) {
         full_html << "<font color='#00aa00'><b>tgpt (typing...):</b></font><br>";
         if (is_code_mode) {
+            all_code_blocks.clear();
+            all_code_blocks.push_back({"Code", sanitize_output(current_response_raw)});
             full_html << render_raw_code_html(sanitize_output(current_response_raw)) << "<br><hr><br>";
         } else {
             full_html << parse_markdown_to_html(sanitize_output(current_response_raw), true) << "<br><hr><br>";
@@ -82,6 +97,12 @@ void redraw_chat_window() {
     for (auto it = chat_history.rbegin(); it != chat_history.rend(); ++it) {
         const auto& msg = *it;
         
+        bool is_latest = (!processing && it == chat_history.rbegin());
+        if (is_latest && msg.code_mode) {
+            all_code_blocks.clear();
+            all_code_blocks.push_back({"Code", msg.response});
+        }
+        
         full_html << "<font color='#0000aa'><b>You:</b></font><br>";
         full_html << escape_html(msg.prompt) << "<br><br>";
         
@@ -91,7 +112,8 @@ void redraw_chat_window() {
             full_html << render_raw_code_html(msg.response) << "<br>";
         } else {
             // Do not extract blocks for history renders to avoid messing up the current blocks
-            full_html << parse_markdown_to_html(msg.response, false) << "<br>";
+            // Unless it is the latest message that needs filling in `all_code_blocks`
+            full_html << parse_markdown_to_html(msg.response, is_latest) << "<br>";
         }
         
         // Add separator if it's not the last loaded historical message
