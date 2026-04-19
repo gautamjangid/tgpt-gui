@@ -32,30 +32,29 @@ void redraw_chat_window() {
    // FLTK's Fl_Help_View does not have a built‑in context menu, so we
    // install a custom handler that shows a simple menu with a "Copy"
    // action. The menu is created only once and reused.
-   static Fl_Menu_Item* ctx_menu = nullptr;
-   static Fl_Menu_Item menu_items[] = {
-       { "Copy", 0, nullptr, nullptr, 0, FL_MENU_DIVIDER },
-       { nullptr }
-   };
    // Handler for right‑click events on the help view.
    static int help_view_handler(int ev) {
        if (ev == FL_PUSH && Fl::event_button() == FL_RIGHT_MOUSE) {
            // Get the mouse position relative to the help view.
            Fl_Widget* w = Fl::event_widget();
            if (w && w == output_box) {
-               // Determine the text under the cursor.
-               int line, col;
-               output_box->position(Fl::event_x(), Fl::event_y(), line, col);
-               // Extract the line's text.
-               std::string txt = output_box->value();
-               // Simple approach: copy the whole line where the click occurred.
-               // For a more precise selection you could parse the HTML,
-               // but copying the line is sufficient for most cases.
-               Fl::copy(txt.c_str() + line, (int)txt.size() - line, 1);
-               // Show a tiny context menu (optional)
-               // Fl_Menu_ (not shown) could be used here if desired.
+               // Show a context menu with Copy options
+               Fl_Menu_Item rclick_menu[] = {
+                   {"&Copy All", 0, nullptr, nullptr, 0},
+                   {nullptr}
+               };
+         
+               // Popup the menu at the mouse position
+               const Fl_Menu_Item* picked = rclick_menu->popup(Fl::event_x_root(), Fl::event_y_root());
+         
+               if (picked) {
+                   if (strcmp(picked->label(), "&Copy All") == 0) {
+                       // Copy all text to clipboard
+                       Fl::copy(output_box->value(), (int)strlen(output_box->value()), 1);
+                   }
+               }
+               return 1; // handled
            }
-           return 1; // handled
        }
        return 0; // not handled
    }
