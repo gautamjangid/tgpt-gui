@@ -29,9 +29,8 @@ void update_ui_code_counter() {
 
 static int help_view_handler(int ev) {
     if (ev == FL_PUSH && Fl::event_button() == FL_RIGHT_MOUSE) {
-        // Get the mouse position relative to the help view.
-        Fl_Widget* w = Fl::event_widget();
-        if (w && w == output_box) {
+        // Check if the event happened inside the help view.
+        if (Fl::event_inside(output_box)) {
             // Show a context menu with Copy options
             Fl_Menu_Item rclick_menu[] = {
                 {"&Copy All", 0, nullptr, nullptr, 0},
