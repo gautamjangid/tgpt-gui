@@ -112,6 +112,7 @@ Extra Args: -i
 - The session stays alive until you click **Cancel** or **Clear Chat**.
 - Response completion is dynamically auto-detected via intelligent prompt-scraping (`>>>`) and Native PTY (Pseudo-Terminal) integration to ensure lightning-fast, buffer-free streaming.
 
+
 ## Uninstallation
 
 To completely remove the application and its dependencies, run the provided uninstaller script:

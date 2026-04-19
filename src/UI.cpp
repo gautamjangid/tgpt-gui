@@ -36,10 +36,10 @@ static int help_view_handler(int ev) {
                 {"&Copy All", 0, nullptr, nullptr, 0},
                 {nullptr}
             };
-        
+
             // Popup the menu at the mouse position
             const Fl_Menu_Item* picked = rclick_menu->popup(Fl::event_x_root(), Fl::event_y_root());
-        
+
             if (picked) {
                 if (strcmp(picked->label(), "&Copy All") == 0) {
                     // Copy all text to clipboard as plain text
@@ -51,7 +51,7 @@ static int help_view_handler(int ev) {
                     if (processing && !current_response_raw.empty()) {
                         copy_text += "tgpt:\n" + sanitize_output(current_response_raw) + "\n\n";
                     }
-                    
+
                     // Give focus to window to ensure X11 clipboard captures it securely
                     Fl::focus(main_window);
                     static std::string safe_clip_buffer;
@@ -78,7 +78,7 @@ void redraw_chat_window() {
     std::ostringstream full_html;
     // FLTK 1.3 doesn't support CSS styles well, so we use traditional HTML tags
     full_html << "<html><body><font face='sans-serif' size='4'>";
-    
+
     // 1. Current processing msg (if any) is the latest, so it goes at the absolute top
     if (processing && !current_response_raw.empty()) {
         full_html << "<font color='#00aa00'><b>tgpt (typing...):</b></font><br>";
@@ -96,16 +96,16 @@ void redraw_chat_window() {
     // 2. Chat history in reverse order
     for (auto it = chat_history.rbegin(); it != chat_history.rend(); ++it) {
         const auto& msg = *it;
-        
+
         bool is_latest = (!processing && it == chat_history.rbegin());
         if (is_latest && msg.code_mode) {
             all_code_blocks.clear();
             all_code_blocks.push_back({"Code", msg.response});
         }
-        
+
         full_html << "<font color='#0000aa'><b>You:</b></font><br>";
         full_html << escape_html(msg.prompt) << "<br><br>";
-        
+
         full_html << "<font color='#00aa00'><b>tgpt:</b></font><br>";
         if (msg.code_mode) {
             // Render as raw code block preserving whitespace
@@ -115,7 +115,7 @@ void redraw_chat_window() {
             // Unless it is the latest message that needs filling in `all_code_blocks`
             full_html << parse_markdown_to_html(msg.response, is_latest) << "<br>";
         }
-        
+
         // Add separator if it's not the last loaded historical message
         if (std::next(it) != chat_history.rend()) {
             full_html << "<br><hr><br>";
@@ -124,12 +124,12 @@ void redraw_chat_window() {
 
     full_html << "</font></body></html>";
     output_box->value(full_html.str().c_str());
-    
+
     // Attempt to maintain scroll position
     if (processing && current_top > 0) {
         output_box->topline(current_top);
     }
-    
+
     update_ui_code_counter();
 }
 
@@ -137,7 +137,7 @@ void redraw_chat_window() {
 void load_history_cb(Fl_Widget*, void*) {
     std::ifstream ifs(get_active_history_filepath());
     chat_history.clear();
-    
+
     if (!ifs.is_open()) {
         redraw_chat_window();
         return;
@@ -208,7 +208,7 @@ void load_history_cb(Fl_Widget*, void*) {
     for (int i = start_idx; i < (int)all_entries.size(); ++i) {
         chat_history.push_back(all_entries[i]);
     }
-    
+
     redraw_chat_window();
 }
 
@@ -217,7 +217,7 @@ void load_chat_file_cb(Fl_Widget*, void*) {
     fnfc.title("Load Chat File");
     fnfc.type(Fl_Native_File_Chooser::BROWSE_FILE);
     fnfc.filter("HTML Files\t*.html\nText Files\t*.txt\nAll Files\t*");
-    
+
     std::string chats_dir = get_chats_dir();
     fnfc.directory(chats_dir.c_str());
 
@@ -278,7 +278,7 @@ void provider_changed_cb(Fl_Widget*, void* v) {
 void settings_cb(Fl_Widget*, void*) {
     SettingsDialogData* data = new SettingsDialogData();
     data->win = new Fl_Window(400, 310, "tgpt-cli Settings");
-    
+
     data->inp_provider = new Fl_Input_Choice(120, 20, 260, 30, "Provider:");
     data->inp_provider->add("sky");
     data->inp_provider->add("pollinations");
@@ -294,29 +294,29 @@ void settings_cb(Fl_Widget*, void*) {
     data->inp_provider->value(tgpt_provider.c_str());
     data->inp_provider->callback(provider_changed_cb, data);
     data->inp_provider->when(FL_WHEN_CHANGED | FL_WHEN_NOT_CHANGED);
-    
+
     data->inp_model = new Fl_Input_Choice(120, 60, 260, 30, "Model:");
     data->inp_model->add("gpt-4o");
     data->inp_model->add("claude-3-opus");
     data->inp_model->add("llama-3");
     data->inp_model->add("mixtral-8x7b");
     data->inp_model->value(tgpt_model.c_str());
-    
+
     data->inp_apikey = new Fl_Input(120, 100, 260, 30, "API Key:");
     data->inp_apikey->value(tgpt_api_key.c_str());
-    
+
     data->inp_args = new Fl_Input(120, 140, 260, 30, "Extra Args:");
     data->inp_args->tooltip("Space-separated args (e.g. -i -m)");
     data->inp_args->value(tgpt_custom_args.c_str());
-    
+
     Fl_Help_View* hv = new Fl_Help_View(10, 180, 380, 80);
     hv->value("<font size='3' face='sans-serif'><b>Hint:</b> Free providers like 'phind'(default), 'koboldai', 'pollinations' and 'sky' do NOT require an API Key or Model selection. Providers like 'openai', 'gemini', 'groq' etc require an API Key. Leave Provider blank for default.</font>");
     hv->box(FL_FLAT_BOX);
     hv->color(data->win->color());
-    
+
     Fl_Button* btn_save = new Fl_Button(150, 270, 100, 30, "Save");
     btn_save->callback(settings_save_cb, data);
-    
+
     provider_changed_cb(data->inp_provider, data); // initialize toggle state
 
     data->win->end();
@@ -357,7 +357,7 @@ void about_cb(Fl_Widget*, void*) {
     Fl_Button* btn = new Fl_Button(185, 300, 80, 30, "OK");
     btn->callback(close_win_cb, win);
     win->end();
-    
+
     int center_x = main_window->x() + (main_window->w() - 450) / 2;
     int center_y = main_window->y() + (main_window->h() - 350) / 2;
     win->position(center_x, center_y);
@@ -395,15 +395,15 @@ void updates_cb(Fl_Widget*, void*) {
     Fl_Window* win = new Fl_Window(500, 300, "Updates");
     Fl_Help_View* hv = new Fl_Help_View(10, 10, 480, 230);
     hv->value("<font face='sans-serif'>Checking for updates... please wait.</font>");
-    
+
     int center_x = main_window->x() + (main_window->w() - 500) / 2;
     int center_y = main_window->y() + (main_window->h() - 300) / 2;
     win->position(center_x, center_y);
     win->show();
-    Fl::check(); 
-    
+    Fl::check();
+
     std::string raw = exec_curl("curl -s https://raw.githubusercontent.com/gautamjangid/tgpt-gui/main/src/Globals.cpp | grep 'APP_VERSION ='");
-    
+
     std::string remote_version = "Unknown";
     size_t first = raw.find('"');
     if (first != std::string::npos) {
@@ -412,10 +412,10 @@ void updates_cb(Fl_Widget*, void*) {
             remote_version = raw.substr(first + 1, second - first - 1);
         }
     }
-    
+
     std::string html;
     bool needs_update = false;
-    
+
     if (remote_version == "Unknown") {
         html = "<font color='red' face='sans-serif'><b>Failed to fetch latest version info. Please check your internet connection.</b></font><br><br>";
     } else if (remote_version == APP_VERSION) {
@@ -426,9 +426,9 @@ void updates_cb(Fl_Widget*, void*) {
                "<font face='sans-serif'>To update, click the 'Update Now' button below, which will download and compile the newest version inside a separate terminal.</font>";
         needs_update = true;
     }
-    
+
     hv->value(html.c_str());
-    
+
     if (needs_update) {
         Fl_Button* btn_upd = new Fl_Button(140, 250, 100, 30, "Update Now");
         btn_upd->callback(run_updater_cb, win);
@@ -441,7 +441,7 @@ void updates_cb(Fl_Widget*, void*) {
         btn->callback(close_win_cb, win);
         win->add(btn);
     }
-    
+
     win->redraw();
 }
 
@@ -476,7 +476,7 @@ static DummyPaster* dummy_paster = nullptr;
 void copy_text_cb(Fl_Widget* w, void*) {
     if (!dummy_paster) dummy_paster = new DummyPaster();
     Fl::paste(*dummy_paster, 0);
-    
+
     Fl_Button* btn = (Fl_Button*)w;
     btn->label("Copied!");
     Fl::add_timeout(1.5, [](void* v) { ((Fl_Button*)v)->label("Copy Text"); }, btn);
