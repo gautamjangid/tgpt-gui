@@ -395,6 +395,8 @@ void copy_block_by_index(int idx) {
 
     const std::string& code = all_code_blocks[idx].code;
 
+    // Ensure the GUI window has focus so the clipboard operation succeeds
+    Fl::focus(main_window);
     Fl::copy(code.c_str(), (int)code.size(), 1);
 
     btn_copy->label("Copied block!");
