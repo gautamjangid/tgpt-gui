@@ -82,8 +82,17 @@ Extra Args: -s
 Prompt: "list all files in current directory"
 ```
 
-- If you click **Yes**: the command executes and the output is saved to `~/.tgpt-gui/shell_output/` as a timestamped `.txt` file. A notification with the file path appears in the chat.
-- If you click **No**: the command is not executed.
+- If you click **Yes**: the command executes immediately and the output is displayed directly in the chat window.
+- If you click **No**: the command is not executed and a notification appears in the chat.
+
+**How it works:**
+1. You ask a question like "how to update my system?"
+2. tgpt generates a suggested command
+3. A popup dialog appears showing the command with **Yes**/**No** buttons
+4. On **Yes**: The command runs and output appears in chat
+5. On **No**: Command is skipped
+
+> **Note:** Shell mode uses a custom confirmation dialog instead of tgpt's interactive mode for better reliability and to prevent UI issues.
 
 ### Interactive Mode (`-i`)
 
