@@ -42,6 +42,7 @@ extern ChatInput          *input_box;
 extern Fl_Help_View       *output_box;
 extern Fl_Button          *btn_send;
 extern Fl_Button          *btn_copy;
+extern Fl_Button          *btn_prev;
 extern Fl_Button          *btn_next;
 extern Fl_Button          *btn_cancel;
 extern Fl_Output          *code_counter;
