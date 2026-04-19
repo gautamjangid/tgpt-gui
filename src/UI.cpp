@@ -456,7 +456,7 @@ void copy_block_by_index(int idx) {
 
     btn_copy->label("Copied block!");
     Fl::add_timeout(1.5, [](void* v) {
-        ((Fl_Button*)v)->label("Copy Selected");
+        ((Fl_Button*)v)->label("Copy Block");
     }, btn_copy);
 }
 
@@ -466,8 +466,6 @@ public:
     int handle(int e) override {
         if (e == FL_PASTE && Fl::event_length() > 0) {
             Fl::copy(Fl::event_text(), Fl::event_length(), 1);
-            btn_copy->label("Copied text!");
-            Fl::add_timeout(1.5, [](void* v) { ((Fl_Button*)v)->label("Copy Selected"); }, btn_copy);
             return 1;
         }
         return 0;
@@ -475,15 +473,16 @@ public:
 };
 static DummyPaster* dummy_paster = nullptr;
 
-void copy_cb(Fl_Widget*, void*) {
-    Fl_Widget* owner = Fl::selection_owner();
-    if (owner && (owner == output_box || output_box->contains(owner))) {
-        if (!dummy_paster) dummy_paster = new DummyPaster();
-        Fl::paste(*dummy_paster, 0);
-        return;
-    }
+void copy_text_cb(Fl_Widget* w, void*) {
+    if (!dummy_paster) dummy_paster = new DummyPaster();
+    Fl::paste(*dummy_paster, 0);
     
-    // Fallback: Copy the currently focused code block
+    Fl_Button* btn = (Fl_Button*)w;
+    btn->label("Copied!");
+    Fl::add_timeout(1.5, [](void* v) { ((Fl_Button*)v)->label("Copy Text"); }, btn);
+}
+
+void copy_cb(Fl_Widget*, void*) {
     if (current_code_idx != -1) {
         copy_block_by_index(current_code_idx);
     }

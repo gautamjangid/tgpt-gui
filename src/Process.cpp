@@ -336,7 +336,7 @@ void send_cb(Fl_Widget*, void*) {
 
     // If interactive session is active, just send prompt to existing process
     if (interactive_session_active && child_stdin_pipe != -1) {
-        std::string msg = prompt + "\n";
+        std::string msg = prompt + "\r";
         write(child_stdin_pipe, msg.c_str(), msg.size());
         return;
     }
@@ -461,7 +461,7 @@ void send_cb(Fl_Widget*, void*) {
         // For -i mode, send the first prompt via stdin
         if (is_interactive_mode) {
             interactive_session_active = true;
-            std::string msg = prompt + "\n";
+            std::string msg = prompt + "\r";
             write(child_stdin_pipe, msg.c_str(), msg.size());
         }
         

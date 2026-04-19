@@ -65,8 +65,13 @@ int main(int argc, char **argv) {
     btn_next->callback(next_code_cb);
     btn_next->tooltip("Next code block");
 
-    btn_copy = new Fl_Button(600, 600, 180, 25, "Copy Selected");
+    Fl_Button *btn_copy_text = new Fl_Button(600, 600, 85, 25, "Copy Text");
+    btn_copy_text->callback(copy_text_cb);
+    btn_copy_text->tooltip("Copies text that is highlighted with the mouse");
+
+    btn_copy = new Fl_Button(690, 600, 90, 25, "Copy Block");
     btn_copy->callback(copy_cb);
+    btn_copy->tooltip("Copies the parsed code block designated above");
 
     main_window->resizable(output_box);
     main_window->end();
