@@ -32,6 +32,7 @@ std::atomic<bool> processing{false};
 pid_t child_pid = 0;
 int child_pipe = -1;
 int child_stdin_pipe = -1;
+int child_pty_master = -1;
 std::string current_response_raw;
 
 // Mode Flags
