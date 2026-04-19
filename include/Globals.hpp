@@ -10,6 +10,7 @@
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_Native_File_Chooser.H>
 #include <FL/fl_ask.H>
+#include <cstring>
 
 #include <string>
 #include <vector>
