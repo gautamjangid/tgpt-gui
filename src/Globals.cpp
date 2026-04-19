@@ -61,7 +61,7 @@ std::string current_history_filepath = "";
 
 
 // Settings State
-const std::string APP_VERSION = "1.0.5";
+const std::string APP_VERSION = "1.0.6";
 std::string tgpt_provider = "";
 std::string tgpt_model = "";
 std::string tgpt_api_key = "";
