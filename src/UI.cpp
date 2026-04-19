@@ -460,9 +460,9 @@ void copy_block_by_index(int idx) {
     }, btn_copy);
 }
 
-class DummyPaster : public Fl_Widget {
+class DummyPaster : public Fl_Box {
 public:
-    DummyPaster() : Fl_Widget(0,0,0,0) {}
+    DummyPaster() : Fl_Box(0,0,0,0) {}
     int handle(int e) override {
         if (e == FL_PASTE && Fl::event_length() > 0) {
             Fl::copy(Fl::event_text(), Fl::event_length(), 1);
