@@ -120,25 +120,48 @@ void interactive_response_timeout_cb(void*) {
 void show_shell_confirm_dialog() {
     std::string sanitized = sanitize_output(current_response_raw);
 
-    // Extract the suggested command (text before the y/n prompt)
+    // Extract the suggested command from tgpt output
+    // tgpt shell mode typically outputs the command on its own line(s)
     std::string command = sanitized;
-    size_t prompt_pos = std::string::npos;
-    // Try common prompt patterns
-    const char* patterns[] = {"[y/n]", "(y/n)", "[Y/n]", "[y/N]"};
-    for (const char* pat : patterns) {
-        size_t pos = sanitized.rfind(pat);
-        if (pos != std::string::npos) {
-            prompt_pos = pos;
-            break;
+    
+    // Remove markdown code blocks if present (common in tgpt output)
+    size_t code_start = command.find("```");
+    if (code_start != std::string::npos) {
+        size_t code_end = command.find("```", code_start + 3);
+        if (code_end != std::string::npos) {
+            command = command.substr(code_start + 3, code_end - code_start - 3);
         }
     }
-    if (prompt_pos != std::string::npos) {
-        command = sanitized.substr(0, prompt_pos);
+    
+    // Remove language identifier after opening code block
+    size_t lang_end = command.find('\n');
+    if (lang_end != std::string::npos && lang_end < 20) {
+        // Check if first line looks like a language name (short, no spaces)
+        std::string first_line = command.substr(0, lang_end);
+        if (first_line.find(' ') == std::string::npos && first_line.length() < 15) {
+            command = command.substr(lang_end + 1);
+        }
     }
-
-    // Trim whitespace from command display
+    
+    // Trim whitespace and newlines
     size_t start = command.find_first_not_of(" \t\n\r");
     size_t end = command.find_last_not_of(" \t\n\r");
+    if (start != std::string::npos && end != std::string::npos) {
+        command = command.substr(start, end - start + 1);
+    }
+    
+    // Remove any remaining prompt patterns or tgpt metadata
+    const char* patterns[] = {"[y/n]", "(y/n)", "[Y/n]", "[y/N]", "Enter your choice", "tgpt:", "tgpt -s"};
+    for (const char* pat : patterns) {
+        size_t pos = command.find(pat);
+        if (pos != std::string::npos) {
+            command = command.substr(0, pos);
+        }
+    }
+    
+    // Trim again after removing patterns
+    start = command.find_first_not_of(" \t\n\r");
+    end = command.find_last_not_of(" \t\n\r");
     if (start != std::string::npos && end != std::string::npos) {
         command = command.substr(start, end - start + 1);
     }
@@ -157,14 +180,52 @@ void show_shell_confirm_dialog() {
         Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
     }
 
-    if (choice == 1 && child_stdin_pipe != -1) {
-        // User chose Yes
+    if (choice == 1) {
+        // User chose Yes - execute command directly
         shell_save_output = true;
         shell_response_start_pos = current_response_raw.size();
-        write(child_stdin_pipe, "y\n", 2);
-    } else if (child_stdin_pipe != -1) {
-        // User chose No
-        write(child_stdin_pipe, "n\n", 2);
+        
+        // Execute the command and capture output
+        std::string cmd_with_output = command + " 2>&1";
+        FILE* pipe = popen(cmd_with_output.c_str(), "r");
+        if (pipe) {
+            char buffer[256];
+            std::string cmd_output;
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                cmd_output += buffer;
+            }
+            pclose(pipe);
+            
+            // Append command output to response
+            if (!cmd_output.empty()) {
+                current_response_raw += "\n\n--- Command Output ---\n" + cmd_output;
+            } else {
+                current_response_raw += "\n\n[Command executed successfully (no output)]";
+            }
+        } else {
+            current_response_raw += "\n\n[Failed to execute command]";
+        }
+        
+        // Mark shell mode as complete
+        shell_prompt_shown = false;
+    } else {
+        // User chose No - just mark as complete
+        current_response_raw += "\n\n[Command not executed by user]";
+        shell_prompt_shown = false;
+    }
+    
+    // Finish processing since we handled the command
+    Fl::remove_timeout(timer_redraw_cb);
+    processing = false;
+    btn_send->activate();
+    redraw_chat_window();
+}
+
+// Shell mode timeout - show dialog after receiving some output
+void shell_mode_timeout_cb(void*) {
+    if (is_shell_mode && !shell_prompt_shown && processing && !current_response_raw.empty()) {
+        shell_prompt_shown = true;
+        show_shell_confirm_dialog();
     }
 }
 
@@ -176,19 +237,15 @@ void pipe_read_cb(int fd, void*) {
         current_response_raw.append(buffer, bytes);
         needs_redraw = true;
 
-        // Shell mode: detect y/n prompt
+        // Shell mode: detect command and show confirmation dialog
         if (is_shell_mode && !shell_prompt_shown) {
             std::string sanitized = sanitize_output(current_response_raw);
-            bool found_prompt = false;
-            const char* patterns[] = {"[y/n]", "(y/n)", "[Y/n]", "[y/N]"};
-            for (const char* pat : patterns) {
-                if (sanitized.find(pat) != std::string::npos) {
-                    found_prompt = true;
-                    break;
-                }
-            }
-            if (found_prompt) {
+            // Check if we have received enough output to extract a command
+            // Shell mode output typically contains a command suggestion
+            // Wait for at least 100 characters or detection of command-like content
+            if (sanitized.length() > 100 || (sanitized.length() > 30 && sanitized.find("tgpt") != std::string::npos)) {
                 shell_prompt_shown = true;
+                Fl::remove_timeout(shell_mode_timeout_cb);
                 show_shell_confirm_dialog();
             }
         }
@@ -272,15 +329,20 @@ void send_cb(Fl_Widget*, void*) {
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
 
-    // Create stdin pipe for -s and -i modes
+    // Create stdin pipe for -i mode only
     int stdin_pipefd[2] = {-1, -1};
-    if (is_shell_mode || is_interactive_mode) {
+    if (is_interactive_mode) {
         if (pipe(stdin_pipefd) != 0) {
             close(pipefd[0]);
             close(pipefd[1]);
             finish_processing(true);
             return;
         }
+    }
+    // For -s mode, no stdin pipe needed - stdin will be /dev/null
+    // Set timeout to show dialog even if pattern detection fails
+    if (is_shell_mode) {
+        Fl::add_timeout(3.0, shell_mode_timeout_cb);
     }
 
     child_pid = fork();
@@ -291,7 +353,14 @@ void send_cb(Fl_Widget*, void*) {
         close(pipefd[0]);
         close(pipefd[1]);
 
-        if (stdin_pipefd[0] != -1) {
+        if (is_shell_mode) {
+            // For shell mode, connect stdin to /dev/null
+            int devnull = open("/dev/null", O_RDONLY);
+            if (devnull != -1) {
+                dup2(devnull, STDIN_FILENO);
+                close(devnull);
+            }
+        } else if (stdin_pipefd[0] != -1) {
             dup2(stdin_pipefd[0], STDIN_FILENO);
             close(stdin_pipefd[0]);
             close(stdin_pipefd[1]);
@@ -324,8 +393,9 @@ void send_cb(Fl_Widget*, void*) {
             }
         }
 
-        // For -i and -s modes, don't pass prompt as CLI arg (it goes via stdin)
-        if (!is_interactive_mode && !is_shell_mode) {
+        // For -i mode, don't pass prompt as CLI arg (it goes via stdin)
+        // For -s mode, prompt IS passed as CLI arg, stdin is only for y/n confirmation
+        if (!is_interactive_mode) {
             args.push_back((char*)prompt.c_str());
         }
         args.push_back(nullptr);
@@ -349,13 +419,8 @@ void send_cb(Fl_Widget*, void*) {
             write(child_stdin_pipe, msg.c_str(), msg.size());
         }
         
-        // For -s mode, send the prompt via stdin and close the write end
-        if (is_shell_mode && child_stdin_pipe != -1) {
-            std::string msg = prompt + "\n";
-            write(child_stdin_pipe, msg.c_str(), msg.size());
-            close(child_stdin_pipe);
-            child_stdin_pipe = -1;
-        }
+// For -s mode, prompt was passed as CLI argument, stdin is /dev/null
+// Command confirmation is handled via dialog in show_shell_confirm_dialog()
     } else {
         close(pipefd[0]);
         close(pipefd[1]);
