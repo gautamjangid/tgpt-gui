@@ -27,41 +27,39 @@ void update_ui_code_counter() {
     }
 }
 
+static int help_view_handler(int ev) {
+    if (ev == FL_PUSH && Fl::event_button() == FL_RIGHT_MOUSE) {
+        // Get the mouse position relative to the help view.
+        Fl_Widget* w = Fl::event_widget();
+        if (w && w == output_box) {
+            // Show a context menu with Copy options
+            Fl_Menu_Item rclick_menu[] = {
+                {"&Copy All", 0, nullptr, nullptr, 0},
+                {nullptr}
+            };
+        
+            // Popup the menu at the mouse position
+            const Fl_Menu_Item* picked = rclick_menu->popup(Fl::event_x_root(), Fl::event_y_root());
+        
+            if (picked) {
+                if (strcmp(picked->label(), "&Copy All") == 0) {
+                    // Copy all text to clipboard
+                    Fl::copy(output_box->value(), (int)strlen(output_box->value()), 1);
+                }
+            }
+            return 1; // handled
+        }
+    }
+    return 0; // not handled
+}
+
 void redraw_chat_window() {
-   // Enable right‑click context menu on the help view.
-   // FLTK's Fl_Help_View does not have a built‑in context menu, so we
-   // install a custom handler that shows a simple menu with a "Copy"
-   // action. The menu is created only once and reused.
-   // Handler for right‑click events on the help view.
-   static int help_view_handler(int ev) {
-       if (ev == FL_PUSH && Fl::event_button() == FL_RIGHT_MOUSE) {
-           // Get the mouse position relative to the help view.
-           Fl_Widget* w = Fl::event_widget();
-           if (w && w == output_box) {
-               // Show a context menu with Copy options
-               Fl_Menu_Item rclick_menu[] = {
-                   {"&Copy All", 0, nullptr, nullptr, 0},
-                   {nullptr}
-               };
-         
-               // Popup the menu at the mouse position
-               const Fl_Menu_Item* picked = rclick_menu->popup(Fl::event_x_root(), Fl::event_y_root());
-         
-               if (picked) {
-                   if (strcmp(picked->label(), "&Copy All") == 0) {
-                       // Copy all text to clipboard
-                       Fl::copy(output_box->value(), (int)strlen(output_box->value()), 1);
-                   }
-               }
-               return 1; // handled
-           }
-       }
-       return 0; // not handled
-   }
    // Register the handler once.
+   // Wait, wait... output_box handle override might not be valid... let's see what happens.
    static bool handler_added = false;
    if (!handler_added) {
-       output_box->handle = help_view_handler;
+       // Note: Fl::add_handler could be used instead of subclassing. Let's run a test fix first.
+       Fl::add_handler(help_view_handler);
        handler_added = true;
    }
     int current_top = output_box->topline();
