@@ -261,7 +261,7 @@ void pipe_read_cb(int fd, void*) {
         if (interactive_session_active) {
             std::string sanitized = sanitize_output(current_response_raw);
             bool prompt_detected = false;
-            const char* prompts[] = {">>> ", "╰─> ", ">> ", "tgpt:"};
+            const char* prompts[] = {">>> ", "╰─> ", ">> ", "tgpt:", "╭─ You", "You"};
             for (const char* p : prompts) {
                 std::string ps(p);
                 if (sanitized.size() >= ps.size() &&
@@ -336,55 +336,32 @@ void send_cb(Fl_Widget*, void*) {
 
     // If interactive session is active, just send prompt to existing process
     if (interactive_session_active && child_stdin_pipe != -1) {
-        std::string msg = prompt + "\r";
+        std::string msg = prompt + "\n";
         write(child_stdin_pipe, msg.c_str(), msg.size());
         return;
     }
 
     // --- Start new process ---
-    int pipefd[2] = {-1, -1};
-    int stdin_pipefd[2] = {-1, -1};
-
-    // Use POSIX PTY for interactive mode to prevent block-buffering and support TTY apps
-    if (is_interactive_mode) {
-        int master = posix_openpt(O_RDWR | O_NOCTTY);
-        if (master != -1) {
-            grantpt(master);
-            unlockpt(master);
-            int slave = open(ptsname(master), O_RDWR);
-            if (slave != -1) {
-                pipefd[0] = master;
-                pipefd[1] = slave;
-                stdin_pipefd[0] = slave;
-                stdin_pipefd[1] = master;
-                
-                struct termios ts;
-                tcgetattr(slave, &ts);
-                ts.c_oflag &= ~ONLCR; // Disable CRLF translation
-                ts.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
-                tcsetattr(slave, TCSANOW, &ts);
-            }
-        }
-    }
-
-    if (pipefd[0] == -1) {
-        if (pipe(pipefd) != 0) {
-            finish_processing(true);
-            return;
-        }
-        if (is_interactive_mode) {
-            if (pipe(stdin_pipefd) != 0) {
-                close(pipefd[0]);
-                close(pipefd[1]);
-                finish_processing(true);
-                return;
-            }
-        }
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        finish_processing(true);
+        return;
     }
     
     // Set non-blocking on read end
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+
+    // Create stdin pipe for -i mode only
+    int stdin_pipefd[2] = {-1, -1};
+    if (is_interactive_mode) {
+        if (pipe(stdin_pipefd) != 0) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            finish_processing(true);
+            return;
+        }
+    }
     // For -s mode, no stdin pipe needed - stdin will be /dev/null
     // Set timeout to show dialog even if pattern detection fails
     if (is_shell_mode) {
@@ -461,7 +438,7 @@ void send_cb(Fl_Widget*, void*) {
         // For -i mode, send the first prompt via stdin
         if (is_interactive_mode) {
             interactive_session_active = true;
-            std::string msg = prompt + "\r";
+            std::string msg = prompt + "\n";
             write(child_stdin_pipe, msg.c_str(), msg.size());
         }
         
