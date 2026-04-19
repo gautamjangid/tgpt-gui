@@ -47,6 +47,11 @@ Once installed, you can launch the application by:
    tgpt-gui
    ```
 
+### Copy Functionality
+The application's **Copy Selected** button at the bottom provides a seamless dual-action mode:
+- **Highlighted Text:** If you manually highlight any text in the chat view with your mouse, clicking the button instantly copies that selection to your clipboard (equivalent to pressing `Ctrl+C`).
+- **Code Blocks:** If nothing is selected, you can use the arrow buttons to cycle through all recognized backend code blocks in the current view and copy them natively with a single click.
+
 ## How to use tgpt-cli Settings
 
 `tgpt-gui` provides an integrated interface to configure the underlying AI runtime natively directly from the GUI (found under **Settings -> tgpt-cli**).
@@ -105,7 +110,8 @@ Extra Args: -i
 - The first prompt starts the tgpt interactive process.
 - Subsequent prompts are sent to the **same running process**, preserving conversation context.
 - The session stays alive until you click **Cancel** or **Clear Chat**.
-- Response completion is auto-detected after a 2-second silence.
+- Response completion is dynamically auto-detected via intelligent prompt-scraping (`>>>`) and Native PTY (Pseudo-Terminal) integration to ensure lightning-fast, buffer-free streaming.
+
 
 ## Uninstallation
 

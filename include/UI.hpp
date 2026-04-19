@@ -17,6 +17,8 @@ void updates_cb(Fl_Widget*, void*);
 
 void copy_block_by_index(int idx);
 void copy_cb(Fl_Widget*, void*);
+void copy_text_cb(Fl_Widget*, void*);
+void prev_code_cb(Fl_Widget*, void*);
 void next_code_cb(Fl_Widget*, void*);
 void timer_redraw_cb(void*);
 

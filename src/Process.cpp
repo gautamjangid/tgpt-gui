@@ -13,6 +13,8 @@
 #include <sstream>
 #include <fstream>
 #include <FL/fl_ask.H>
+#include <stdlib.h>
+#include <termios.h>
 
 namespace tgpt {
 
@@ -123,7 +125,7 @@ void show_shell_confirm_dialog() {
     // Extract the suggested command from tgpt output
     // tgpt shell mode typically outputs the command on its own line(s)
     std::string command = sanitized;
-    
+
     // Remove markdown code blocks if present (common in tgpt output)
     size_t code_start = command.find("```");
     if (code_start != std::string::npos) {
@@ -132,7 +134,7 @@ void show_shell_confirm_dialog() {
             command = command.substr(code_start + 3, code_end - code_start - 3);
         }
     }
-    
+
     // Remove language identifier after opening code block
     size_t lang_end = command.find('\n');
     if (lang_end != std::string::npos && lang_end < 20) {
@@ -142,14 +144,14 @@ void show_shell_confirm_dialog() {
             command = command.substr(lang_end + 1);
         }
     }
-    
+
     // Trim whitespace and newlines
     size_t start = command.find_first_not_of(" \t\n\r");
     size_t end = command.find_last_not_of(" \t\n\r");
     if (start != std::string::npos && end != std::string::npos) {
         command = command.substr(start, end - start + 1);
     }
-    
+
     // Remove any remaining prompt patterns or tgpt metadata
     const char* patterns[] = {"[y/n]", "(y/n)", "[Y/n]", "[y/N]", "Enter your choice", "tgpt:", "tgpt -s"};
     for (const char* pat : patterns) {
@@ -158,7 +160,7 @@ void show_shell_confirm_dialog() {
             command = command.substr(0, pos);
         }
     }
-    
+
     // Trim again after removing patterns
     start = command.find_first_not_of(" \t\n\r");
     end = command.find_last_not_of(" \t\n\r");
@@ -184,7 +186,7 @@ void show_shell_confirm_dialog() {
         // User chose Yes - execute command directly
         shell_save_output = true;
         shell_response_start_pos = current_response_raw.size();
-        
+
         // Execute the command and capture output
         std::string cmd_with_output = command + " 2>&1";
         FILE* pipe = popen(cmd_with_output.c_str(), "r");
@@ -195,7 +197,7 @@ void show_shell_confirm_dialog() {
                 cmd_output += buffer;
             }
             pclose(pipe);
-            
+
             // Append command output to response
             if (!cmd_output.empty()) {
                 current_response_raw += "\n\n--- Command Output ---\n" + cmd_output;
@@ -205,7 +207,7 @@ void show_shell_confirm_dialog() {
         } else {
             current_response_raw += "\n\n[Failed to execute command]";
         }
-        
+
         // Mark shell mode as complete
         shell_prompt_shown = false;
     } else {
@@ -213,7 +215,7 @@ void show_shell_confirm_dialog() {
         current_response_raw += "\n\n[Command not executed by user]";
         shell_prompt_shown = false;
     }
-    
+
     // Finish processing since we handled the command
     Fl::remove_timeout(timer_redraw_cb);
     processing = false;
@@ -234,6 +236,11 @@ void pipe_read_cb(int fd, void*) {
     char buffer[256];
     ssize_t bytes = read(fd, buffer, sizeof(buffer));
     if (bytes > 0) {
+        if (interactive_session_active && !processing) {
+            processing = true;
+            btn_send->deactivate();
+            current_response_raw.clear();
+        }
         current_response_raw.append(buffer, bytes);
         needs_redraw = true;
 
@@ -250,10 +257,26 @@ void pipe_read_cb(int fd, void*) {
             }
         }
 
-        // Interactive mode: reset response timeout on each data chunk
+        // Interactive mode: detect prompt indicator for smart timeout
         if (interactive_session_active) {
+            std::string sanitized = sanitize_output(current_response_raw);
+            bool prompt_detected = false;
+            const char* prompts[] = {">>> ", "╰─> ", ">> ", "tgpt:", "╭─ You", "You"};
+            for (const char* p : prompts) {
+                std::string ps(p);
+                if (sanitized.size() >= ps.size() &&
+                    sanitized.compare(sanitized.size() - ps.size(), ps.size(), ps) == 0) {
+                    prompt_detected = true;
+                    break;
+                }
+            }
+
             Fl::remove_timeout(interactive_response_timeout_cb);
-            Fl::add_timeout(2.0, interactive_response_timeout_cb);
+            if (prompt_detected) {
+                Fl::add_timeout(0.5, interactive_response_timeout_cb);
+            } else {
+                Fl::add_timeout(120.0, interactive_response_timeout_cb);
+            }
         }
     } else if (bytes == 0 || (bytes == -1 && errno != EAGAIN && errno != EINTR)) {
         // Process ended
@@ -324,7 +347,7 @@ void send_cb(Fl_Widget*, void*) {
         finish_processing(true);
         return;
     }
-    
+
     // Set non-blocking on read end
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
@@ -418,7 +441,7 @@ void send_cb(Fl_Widget*, void*) {
             std::string msg = prompt + "\n";
             write(child_stdin_pipe, msg.c_str(), msg.size());
         }
-        
+
 // For -s mode, prompt was passed as CLI argument, stdin is /dev/null
 // Command confirmation is handled via dialog in show_shell_confirm_dialog()
     } else {

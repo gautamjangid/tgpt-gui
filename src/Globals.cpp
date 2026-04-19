@@ -22,6 +22,7 @@ ChatInput          *input_box = nullptr;
 Fl_Help_View       *output_box = nullptr;
 Fl_Button          *btn_send   = nullptr;
 Fl_Button          *btn_copy   = nullptr;
+Fl_Button          *btn_prev   = nullptr;
 Fl_Button          *btn_next   = nullptr;
 Fl_Button          *btn_cancel = nullptr;
 Fl_Output          *code_counter = nullptr;
@@ -60,7 +61,7 @@ std::string current_history_filepath = "";
 
 
 // Settings State
-const std::string APP_VERSION = "1.0.5";
+const std::string APP_VERSION = "1.0.6";
 std::string tgpt_provider = "";
 std::string tgpt_model = "";
 std::string tgpt_api_key = "";
