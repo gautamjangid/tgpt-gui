@@ -403,39 +403,40 @@ void send_cb(Fl_Widget*, void*) {
     child_pid = fork();
     if (child_pid == 0) {
         // Child process
-        dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
-        close(pipefd[0]);
-        close(pipefd[1]);
-
-        if (is_shell_mode) {
-            // For shell mode, connect stdin to /dev/null
-            int devnull = open("/dev/null", O_RDONLY);
-            if (devnull != -1) {
-                dup2(devnull, STDIN_FILENO);
-                close(devnull);
-            }
-        } else if (is_interactive_mode) {
 #ifdef __linux__
-            // For interactive mode with PTY, connect to PTY slave
+        if (is_interactive_mode && pty_slave != -1) {
+            // PTY mode: all I/O goes through the slave — do NOT touch pipefd at all.
+            // Close both ends of the unused pipe in the child.
+            close(pipefd[0]);
+            close(pipefd[1]);
             dup2(pty_slave, STDIN_FILENO);
             dup2(pty_slave, STDOUT_FILENO);
             dup2(pty_slave, STDERR_FILENO);
             close(pty_slave);
             close(pty_master);
-#else
-            // For regular pipe fallback
-            if (stdin_pipefd[0] != -1) {
+        } else {
+#endif
+            // Non-PTY path: route stdout/stderr through the pipe to the parent.
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+            close(pipefd[0]);
+            close(pipefd[1]);
+
+            if (is_shell_mode) {
+                // For shell mode, connect stdin to /dev/null
+                int devnull = open("/dev/null", O_RDONLY);
+                if (devnull != -1) {
+                    dup2(devnull, STDIN_FILENO);
+                    close(devnull);
+                }
+            } else if (stdin_pipefd[0] != -1) {
                 dup2(stdin_pipefd[0], STDIN_FILENO);
                 close(stdin_pipefd[0]);
                 close(stdin_pipefd[1]);
             }
-#endif
-        } else if (stdin_pipefd[0] != -1) {
-            dup2(stdin_pipefd[0], STDIN_FILENO);
-            close(stdin_pipefd[0]);
-            close(stdin_pipefd[1]);
+#ifdef __linux__
         }
+#endif
 
         std::vector<char*> args;
         args.push_back((char*)"tgpt");
@@ -475,20 +476,32 @@ void send_cb(Fl_Widget*, void*) {
         _exit(127);
     } else if (child_pid > 0) {
         close(pipefd[1]);
-        child_pipe = pipefd[0];
-        Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
 
 #ifdef __linux__
         if (is_interactive_mode && pty_master != -1) {
+            // PTY mode: the child closed pipefd entirely and uses only the PTY slave
+            // for all I/O. Registering pipefd[0] here would get an immediate EOF
+            // (no writer left) and trigger finish_processing before any data arrives.
+            // Discard pipefd[0] and use only the PTY master for read/write.
+            close(pipefd[0]);      // FIX: don't register — would EOF immediately
+            child_pipe = -1;       // FIX: keep -1 so finish_processing skips it
+
             close(pty_slave);
             child_pty_master = pty_master;
-            child_stdin_pipe = pty_master; // Use PTY master for both read/write
+            child_stdin_pipe = pty_master; // PTY master used for both read and write
             Fl::add_fd(child_pty_master, FL_READ, pipe_read_cb);
-        } else if (stdin_pipefd[1] != -1) {
-            close(stdin_pipefd[0]);
-            child_stdin_pipe = stdin_pipefd[1];
+        } else {
+            // Non-PTY path: child writes stdout/stderr to pipefd[1].
+            child_pipe = pipefd[0];
+            Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
+            if (stdin_pipefd[1] != -1) {
+                close(stdin_pipefd[0]);
+                child_stdin_pipe = stdin_pipefd[1];
+            }
         }
 #else
+        child_pipe = pipefd[0];
+        Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
         if (stdin_pipefd[1] != -1) {
             close(stdin_pipefd[0]);
             child_stdin_pipe = stdin_pipefd[1];
