@@ -15,6 +15,14 @@
 #include <FL/fl_ask.H>
 #include <stdlib.h>
 #include <termios.h>
+#ifdef __linux__
+#include <pty.h>
+#elif defined(__APPLE__)
+#include <util.h>
+#elif defined(_WIN32)
+// Windows doesn't have PTY in the same way, but we can use conpty on Windows 10+
+// For now, we'll fall back to regular pipes on Windows
+#endif
 
 namespace tgpt {
 
@@ -32,6 +40,11 @@ void finish_processing(bool cancelled) {
     if (child_stdin_pipe != -1) {
         close(child_stdin_pipe);
         child_stdin_pipe = -1;
+    }
+    if (child_pty_master != -1) {
+        Fl::remove_fd(child_pty_master);
+        close(child_pty_master);
+        child_pty_master = -1;
     }
     if (child_pid > 0) {
         if (cancelled) kill(child_pid, SIGTERM);
@@ -354,13 +367,32 @@ void send_cb(Fl_Widget*, void*) {
 
     // Create stdin pipe for -i mode only
     int stdin_pipefd[2] = {-1, -1};
+#ifdef __linux__
+    int pty_master = -1;
+    int pty_slave = -1;
+#endif
+    
     if (is_interactive_mode) {
+#ifdef __linux__
+        // Use PTY for interactive mode on Linux
+        if (openpty(&pty_master, &pty_slave, NULL, NULL, NULL) != 0) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            finish_processing(true);
+            return;
+        }
+        // Set non-blocking on PTY master
+        int flags = fcntl(pty_master, F_GETFL, 0);
+        fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
+#else
+        // Fall back to regular pipes on other platforms
         if (pipe(stdin_pipefd) != 0) {
             close(pipefd[0]);
             close(pipefd[1]);
             finish_processing(true);
             return;
         }
+#endif
     }
     // For -s mode, no stdin pipe needed - stdin will be /dev/null
     // Set timeout to show dialog even if pattern detection fails
@@ -383,6 +415,22 @@ void send_cb(Fl_Widget*, void*) {
                 dup2(devnull, STDIN_FILENO);
                 close(devnull);
             }
+        } else if (is_interactive_mode) {
+#ifdef __linux__
+            // For interactive mode with PTY, connect to PTY slave
+            dup2(pty_slave, STDIN_FILENO);
+            dup2(pty_slave, STDOUT_FILENO);
+            dup2(pty_slave, STDERR_FILENO);
+            close(pty_slave);
+            close(pty_master);
+#else
+            // For regular pipe fallback
+            if (stdin_pipefd[0] != -1) {
+                dup2(stdin_pipefd[0], STDIN_FILENO);
+                close(stdin_pipefd[0]);
+                close(stdin_pipefd[1]);
+            }
+#endif
         } else if (stdin_pipefd[0] != -1) {
             dup2(stdin_pipefd[0], STDIN_FILENO);
             close(stdin_pipefd[0]);
@@ -430,16 +478,38 @@ void send_cb(Fl_Widget*, void*) {
         child_pipe = pipefd[0];
         Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
 
+#ifdef __linux__
+        if (is_interactive_mode && pty_master != -1) {
+            close(pty_slave);
+            child_pty_master = pty_master;
+            child_stdin_pipe = pty_master; // Use PTY master for both read/write
+            Fl::add_fd(child_pty_master, FL_READ, pipe_read_cb);
+        } else if (stdin_pipefd[1] != -1) {
+            close(stdin_pipefd[0]);
+            child_stdin_pipe = stdin_pipefd[1];
+        }
+#else
         if (stdin_pipefd[1] != -1) {
             close(stdin_pipefd[0]);
             child_stdin_pipe = stdin_pipefd[1];
         }
+#endif
 
         // For -i mode, send the first prompt via stdin
         if (is_interactive_mode) {
             interactive_session_active = true;
             std::string msg = prompt + "\n";
-            write(child_stdin_pipe, msg.c_str(), msg.size());
+#ifdef __linux__
+            if (child_pty_master != -1) {
+                write(child_pty_master, msg.c_str(), msg.size());
+            } else if (child_stdin_pipe != -1) {
+                write(child_stdin_pipe, msg.c_str(), msg.size());
+            }
+#else
+            if (child_stdin_pipe != -1) {
+                write(child_stdin_pipe, msg.c_str(), msg.size());
+            }
+#endif
         }
 
 // For -s mode, prompt was passed as CLI argument, stdin is /dev/null
@@ -447,10 +517,20 @@ void send_cb(Fl_Widget*, void*) {
     } else {
         close(pipefd[0]);
         close(pipefd[1]);
+#ifdef __linux__
+        if (is_interactive_mode && pty_master != -1) {
+            close(pty_master);
+            close(pty_slave);
+        } else if (stdin_pipefd[0] != -1) {
+            close(stdin_pipefd[0]);
+            close(stdin_pipefd[1]);
+        }
+#else
         if (stdin_pipefd[0] != -1) {
             close(stdin_pipefd[0]);
             close(stdin_pipefd[1]);
         }
+#endif
         finish_processing(true);
     }
 }

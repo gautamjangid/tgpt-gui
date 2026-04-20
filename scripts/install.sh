@@ -54,8 +54,11 @@ if [ ! -d "$SOURCE_DIR" ]; then
     exit 1
 fi
 
+
 echo "Compiling sources in $SOURCE_DIR ..."
-g++ -std=c++14 -O2 "$SOURCE_DIR"/*.cpp -I../include -o "$BINARY_NAME" $(fltk-config --cxxflags --ldflags) -pthread
+
+g++ -std=c++14 -O2 "$SOURCE_DIR"/*.cpp -I../include -o "$BINARY_NAME" $(fltk-config --cxxflags --ldflags) -pthread -lutil
+
 
 echo "Installing $BINARY_NAME to /usr/local/bin ..."
 $SUDO mv "$BINARY_NAME" /usr/local/bin/
