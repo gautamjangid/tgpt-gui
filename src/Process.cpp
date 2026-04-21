@@ -117,7 +117,7 @@ void show_shell_confirm_dialog() {
             "Enter your choice", nullptr
         };
         for (int i = 0; yesno_patterns[i]; ++i) {
-            size_t pos = command.find(yesno_patterns[i]);
+            size_t pos = command.rfind(yesno_patterns[i]);
             if (pos != std::string::npos) { command = command.substr(0, pos); break; }
         }
 
@@ -136,7 +136,11 @@ void show_shell_confirm_dialog() {
             if (ln.find("tgpt")     != std::string::npos) continue;
             best = ln;   // last valid line wins
         }
-        if (!best.empty()) command = best;
+        if (!best.empty()) {
+            command = best;
+        } else {
+            command = "";
+        }
     }
 
     // ── Step 2: Final trim + remove leftover prompt artifacts ──
@@ -158,7 +162,6 @@ void show_shell_confirm_dialog() {
     if (child_pipe != -1) {
         Fl::remove_fd(child_pipe);
     }
-    Fl::remove_timeout(shell_mode_timeout_cb);
 
     // Set shell_prompt_shown to true to prevent re-triggering
     shell_prompt_shown = true;
@@ -197,13 +200,6 @@ void show_shell_confirm_dialog() {
     finish_processing(false);
 }
 
-// Shell mode timeout - show dialog after receiving some output
-void shell_mode_timeout_cb(void*) {
-    if (is_shell_mode && !shell_prompt_shown && processing && !current_response_raw.empty()) {
-        shell_prompt_shown = true;
-        show_shell_confirm_dialog();
-    }
-}
 
 // Pipe reader for streaming output
 void pipe_read_cb(int fd, void*) {
@@ -216,10 +212,11 @@ void pipe_read_cb(int fd, void*) {
         // Shell mode: detect command and show confirmation dialog
         if (is_shell_mode && !shell_prompt_shown) {
             std::string sanitized = sanitize_output(current_response_raw);
-            if (sanitized.length() > 100 ||
-                (sanitized.length() > 30 && sanitized.find("tgpt") != std::string::npos)) {
+            if (sanitized.find("[y/n]") != std::string::npos ||
+                sanitized.find("[Y/n]") != std::string::npos ||
+                sanitized.find("(y/n)") != std::string::npos ||
+                sanitized.find("Execute shell command?") != std::string::npos) {
                 shell_prompt_shown = true;
-                Fl::remove_timeout(shell_mode_timeout_cb);
                 show_shell_confirm_dialog();
             }
         }
@@ -284,9 +281,7 @@ void send_cb(Fl_Widget*, void*) {
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
 
-    if (is_shell_mode) {
-        Fl::add_timeout(3.0, shell_mode_timeout_cb);
-    }
+
 
     child_pid = fork();
 

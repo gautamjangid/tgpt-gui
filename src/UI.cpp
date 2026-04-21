@@ -331,14 +331,15 @@ void settings_cb(Fl_Widget*, void*) {
     Fl_Help_View* hv = new Fl_Help_View(10, 180, 400, 170);
     hv->value(
         "<font size='3' face='sans-serif'>"
-        "<b>Provider Hint:</b> Free providers (phind/default, koboldai, pollinations, sky, "
-        "duckduckgo) need no API Key. Premium providers (openai, gemini, groq, deepseek) "
+        "<b>Provider Hint:</b> Free providers (default, koboldai, pollinations, sky, "
+        "duckduckgo, blackbox) need no API Key. Premium providers (openai, gemini, groq, deepseek) "
         "require an API Key. Leave blank to use the default provider.<br><br>"
         "<b>Extra Args modes:</b><br>"
         "&bull; <b>-c</b> &mdash; Code Mode: output in formatted code block<br>"
         "&bull; <b>-s</b> &mdash; Shell Mode: suggests commands with Yes/No dialog<br>"
         "&bull; <b>-f</b> &mdash; Search Mode: web search via Google API<br>"
-        "&nbsp;&nbsp;&nbsp;<i>(requires env: TGPT_GOOGLE_API_KEY + TGPT_GOOGLE_SEARCH_ENGINE_ID)</i><br>"
+        "&nbsp;&nbsp;&nbsp;<i>(requires env: TGPT_GOOGLE_API_KEY + </i><br>"
+        "&nbsp;&nbsp;&nbsp;<i>TGPT_GOOGLE_SEARCH_ENGINE_ID)</i><br>"
         "&bull; <b>-q</b> &mdash; Quiet Mode: suppresses spinners and progress output<br><br>"
         "<b>Unsupported modes:</b><br>"
         "&bull; <b>-i, -is</b> &mdash; Interactive modes use bubbletea's raw PTY which is "
@@ -381,12 +382,11 @@ void about_cb(Fl_Widget*, void*) {
 
     Fl_Help_View* hv = new Fl_Help_View(10, 10, 470, 300);
     std::string html =
-        "<font face='sans-serif'><center>"
+        "<font face='sans-serif'>"
         "<b>tgpt Lightweight GUI &nbsp;v" + APP_VERSION + "</b><br>"
         "<font size='3'>A high-performance, low-resource graphical interface for the <b>tgpt</b> AI terminal tool.<br>"
         "Optimized for legacy hardware and minimal RAM environments.</font><br><br>"
         "<font size='3'><b>Author:</b> Gautam Jangid &nbsp;|&nbsp; <b>License:</b> MIT</font><br><br>"
-        "</center>"
         "<b>Features</b><br>"
         "&bull; Real-time streaming output (typing effect)<br>"
         "&bull; Markdown + code-block rendering with copy<br>"
@@ -425,10 +425,10 @@ void license_cb(Fl_Widget*, void*) {
         g_settings_win->hide();
     }
 
-    Fl_Window* win = new Fl_Window(460, 400, "License");
+    Fl_Window* win = new Fl_Window(460, 310, "License");
     g_secondary_win = win;
 
-    Fl_Help_View* hv = new Fl_Help_View(10, 10, 440, 340);
+    Fl_Help_View* hv = new Fl_Help_View(10, 10, 440, 250);
     hv->value(
         "<font face='sans-serif'><center><b>MIT License</b><br><br></center>"
         "<div>"
@@ -451,12 +451,12 @@ void license_cb(Fl_Widget*, void*) {
         "</div></font>"
     );
 
-    Fl_Button* btn = new Fl_Button(190, 362, 80, 28, "OK");
+    Fl_Button* btn = new Fl_Button(190, 270, 80, 28, "OK");
     btn->callback(secondary_close_cb, win);
 
     win->end();
     int cx = main_window->x() + (main_window->w() - 460) / 2;
-    int cy = main_window->y() + (main_window->h() - 400) / 2;
+    int cy = main_window->y() + (main_window->h() - 310) / 2;
     win->position(cx, cy);
     win->show();
 }
@@ -587,7 +587,7 @@ void updates_cb(Fl_Widget*, void*) {
     if (remote_gui == "Unknown") {
         html += "<font color='gray'>Could not fetch latest GUI version (check internet)</font><br>";
     } else if (remote_gui == APP_VERSION) {
-        html += "<font color='green'>&check; Up to date (v" + APP_VERSION + ")</font><br>";
+        html += "<font color='green'>[OK] Up to date (v" + APP_VERSION + ")</font><br>";
     } else {
         html += "<font color='#CC0000'><b>Update available: v" + remote_gui + "</b></font><br>";
         gui_needs_update = true;
@@ -608,7 +608,7 @@ void updates_cb(Fl_Widget*, void*) {
 
         html += "Latest: " + remote_tgpt + "<br>";
         if (local_num == remote_num || local_num.find(remote_num) != std::string::npos) {
-            html += "<font color='green'>&check; Up to date</font><br>";
+            html += "<font color='green'>[OK] Up to date</font><br>";
         } else {
             html += "<font color='#CC0000'><b>Update available</b></font><br>";
             tgpt_needs_update = true;
@@ -618,7 +618,7 @@ void updates_cb(Fl_Widget*, void*) {
     html += "</font>";
     hv->value(html.c_str());
 
-    // --- Buttons (always show tgpt update + close; only add GUI update if needed) ---
+    // --- Buttons (only show what is needed + close) ---
     int btn_y = 315;
     int btn_x = 10;
 
@@ -629,9 +629,11 @@ void updates_cb(Fl_Widget*, void*) {
         btn_x += 150;
     }
 
-    Fl_Button* b2 = new Fl_Button(btn_x, btn_y, 155, 28, "Update tgpt CLI");
-    b2->callback(run_tgpt_updater_cb, nullptr);
-    win->add(b2);
+    if (tgpt_needs_update) {
+        Fl_Button* b2 = new Fl_Button(btn_x, btn_y, 155, 28, "Update tgpt CLI");
+        b2->callback(run_tgpt_updater_cb, nullptr);
+        win->add(b2);
+    }
 
     Fl_Button* b3 = new Fl_Button(430, btn_y, 80, 28, "Close");
     b3->callback(secondary_close_cb, win);
