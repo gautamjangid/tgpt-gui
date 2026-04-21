@@ -8,7 +8,6 @@ std::string sanitize_output(const std::string& raw);
 std::string escape_html(const std::string& data);
 std::string parse_markdown_to_html(const std::string& md, bool clear_blocks = true);
 std::string render_raw_code_html(const std::string& code);
-std::string strip_interactive_prompts(const std::string& text);
 
 std::string get_app_dir();
 std::string get_chats_dir();

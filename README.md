@@ -59,7 +59,7 @@ The application's **Copy Selected** button at the bottom provides a seamless dua
 *   **Provider:** Determines which backend service handles your chat queries. Free providers (such as `duckduckgo`, `phind`, `ollama`) are immediately accessible and require no extra setup. If you select one of these, the Model and API Key inputs will deactivate since they aren't needed.
 *   **Model:** Specifies the exact neural network to query. This is typically only required if you use a top-tier provider like `openai`.
 *   **API Key:** An authenticated token required for premium endpoints like OpenAI or Anthropic. Leave this empty if you are using free providers.
-*   **Extra Args:** Space-separated CLI flags passed directly to tgpt. Supports `-c`, `-s`, `-i` and other flags (see Advanced CLI Modes below).
+*   **Extra Args:** Space-separated CLI flags passed directly to tgpt. Supports `-c` and `-s` flags (see Advanced CLI Modes below).
 
 *(Hint: If you're unsure where to begin, simply leave all settings blank to default securely to the baseline free provider!)*
 
@@ -97,20 +97,7 @@ Prompt: "list all files in current directory"
 4. On **Yes**: The command runs and output appears in chat
 5. On **No**: Command is skipped
 
-> **Note:** Shell mode uses a custom confirmation dialog instead of tgpt's interactive mode for better reliability and to prevent UI issues.
-
-### Interactive Mode (`-i`)
-
-Starts a persistent conversation session where tgpt maintains context between prompts.
-
-```
-Extra Args: -i
-```
-
-- The first prompt starts the tgpt interactive process.
-- Subsequent prompts are sent to the **same running process**, preserving conversation context.
-- The session stays alive until you click **Cancel** or **Clear Chat**.
-- Response completion is dynamically auto-detected via intelligent prompt-scraping (`>>>`) and Native PTY (Pseudo-Terminal) integration to ensure lightning-fast, buffer-free streaming.
+> **Note:** Only `-c` (code mode) and `-s` (shell mode) are supported in Extra Args. The `-i` (interactive) and `-is` (interactive shell) modes use bubbletea — a TUI framework that requires a real PTY with raw mode and cursor control. This is fundamentally incompatible with GUI-based process piping and is therefore not supported.
 
 
 ## Uninstallation

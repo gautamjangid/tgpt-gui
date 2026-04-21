@@ -32,22 +32,18 @@ bool needs_redraw = false;
 std::atomic<bool> processing{false};
 pid_t child_pid = 0;
 int child_pipe = -1;
-int child_stdin_pipe = -1;
-int child_pty_master = -1;
 std::string current_response_raw;
 
 // Mode Flags
 bool is_code_mode = false;
 bool is_shell_mode = false;
-bool is_interactive_mode = false;
-bool interactive_session_active = false;
 
 // Shell mode state
 bool shell_prompt_shown = false;
 bool shell_save_output = false;
 size_t shell_response_start_pos = 0;
 
-// Interactive mode state
+// Response state
 bool current_response_saved = false;
 
 // Code Block State
