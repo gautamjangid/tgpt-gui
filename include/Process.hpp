@@ -9,6 +9,5 @@ void pipe_read_cb(int fd, void*);
 void cancel_cb(Fl_Widget*, void*);
 void send_cb(Fl_Widget*, void*);
 void show_shell_confirm_dialog();
-void shell_mode_timeout_cb(void*);
 
 } // namespace tgpt
