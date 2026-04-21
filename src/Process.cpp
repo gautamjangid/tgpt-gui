@@ -68,7 +68,7 @@ void finish_processing(bool cancelled) {
     }
 
     // Reset mode flags
-    shell_prompt_shown = false;
+    // Note: Don't reset shell_prompt_shown here as it causes double dialog in -s mode
     shell_save_output = false;
     shell_response_start_pos = 0;
     is_code_mode = false;
@@ -88,96 +88,113 @@ void cancel_cb(Fl_Widget*, void*) {
 // Shell mode: show Yes/No dialog for command execution
 void show_shell_confirm_dialog() {
     std::string sanitized = sanitize_output(current_response_raw);
-    std::string command = sanitized;
+    std::string command   = sanitized;
 
-    // Remove markdown code blocks if present
+    // ── Step 1: Extract command from markdown code block if present ──
+    bool found_code_block = false;
     size_t code_start = command.find("```");
     if (code_start != std::string::npos) {
         size_t code_end = command.find("```", code_start + 3);
         if (code_end != std::string::npos) {
             command = command.substr(code_start + 3, code_end - code_start - 3);
+            found_code_block = true;
         }
     }
 
-    // Remove language identifier after opening code block
-    size_t lang_end = command.find('\n');
-    if (lang_end != std::string::npos && lang_end < 20) {
-        std::string first_line = command.substr(0, lang_end);
-        if (first_line.find(' ') == std::string::npos && first_line.length() < 15) {
-            command = command.substr(lang_end + 1);
+    if (found_code_block) {
+        // Remove language tag on first line (e.g. "bash\n")
+        size_t lang_end = command.find('\n');
+        if (lang_end != std::string::npos && lang_end < 20) {
+            std::string first = command.substr(0, lang_end);
+            if (first.find(' ') == std::string::npos && first.length() < 15)
+                command = command.substr(lang_end + 1);
         }
+    } else {
+        // No code block — strip noise and pick the last meaningful command line.
+        // Remove [y/n] prompt text and anything after it.
+        const char* yesno_patterns[] = {
+            "Execute shell command?", "[y/n]", "(y/n)", "[Y/n]", "[y/N]",
+            "Enter your choice", nullptr
+        };
+        for (int i = 0; yesno_patterns[i]; ++i) {
+            size_t pos = command.find(yesno_patterns[i]);
+            if (pos != std::string::npos) { command = command.substr(0, pos); break; }
+        }
+
+        // Walk lines and keep the last line that looks like a real shell command.
+        // Skip: empty lines, non-ASCII first char (spinner glyphs), and noise words.
+        std::istringstream ss(command);
+        std::string ln, best;
+        while (std::getline(ss, ln)) {
+            size_t ns = ln.find_first_not_of(" \t\r");
+            if (ns == std::string::npos) continue;
+            ln = ln.substr(ns);
+            if (ln.empty()) continue;
+            if ((unsigned char)ln[0] > 127) continue;   // Unicode spinner / box char
+            if (ln.find("Loading")  != std::string::npos) continue;
+            if (ln.find("Thinking") != std::string::npos) continue;
+            if (ln.find("tgpt")     != std::string::npos) continue;
+            best = ln;   // last valid line wins
+        }
+        if (!best.empty()) command = best;
     }
 
-    // Trim whitespace and newlines
-    size_t start = command.find_first_not_of(" \t\n\r");
-    size_t end = command.find_last_not_of(" \t\n\r");
-    if (start != std::string::npos && end != std::string::npos) {
-        command = command.substr(start, end - start + 1);
-    }
-
-    // Remove prompt patterns
-    const char* patterns[] = {"[y/n]", "(y/n)", "[Y/n]", "[y/N]", "Enter your choice", "tgpt:", "tgpt -s"};
-    for (const char* pat : patterns) {
+    // ── Step 2: Final trim + remove leftover prompt artifacts ──
+    auto trim_str = [](std::string& s) {
+        size_t f = s.find_first_not_of(" \t\n\r");
+        size_t l = s.find_last_not_of(" \t\n\r");
+        s = (f == std::string::npos) ? "" : s.substr(f, l - f + 1);
+    };
+    trim_str(command);
+    for (const char* pat : {"[y/n]","(y/n)","[Y/n]","[y/N]","tgpt:","tgpt -s"}) {
         size_t pos = command.find(pat);
-        if (pos != std::string::npos) {
-            command = command.substr(0, pos);
-        }
+        if (pos != std::string::npos) command = command.substr(0, pos);
     }
+    trim_str(command);
 
-    // Trim again
-    start = command.find_first_not_of(" \t\n\r");
-    end = command.find_last_not_of(" \t\n\r");
-    if (start != std::string::npos && end != std::string::npos) {
-        command = command.substr(start, end - start + 1);
-    }
-
-    // Temporarily remove pipe handler to prevent re-entrancy during modal dialog
+    // ── Step 3: Remove pipe fd handler — we will NOT re-add it.
+    //    After the dialog we call finish_processing() which kills the child
+    //    process and closes the fd, so no further pipe_read_cb events fire.
     if (child_pipe != -1) {
         Fl::remove_fd(child_pipe);
     }
+    Fl::remove_timeout(shell_mode_timeout_cb);
 
+    // Set shell_prompt_shown to true to prevent re-triggering
+    shell_prompt_shown = true;
+
+    // ── Step 4: Show confirmation dialog ──
     int choice = fl_choice(
         "tgpt suggests running:\n\n%s\n\nExecute this command?",
         "No", "Yes", nullptr, command.c_str());
 
-    // Re-add pipe handler
-    if (child_pipe != -1) {
-        Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
-    }
-
+    // ── Step 5: Handle choice ──
     if (choice == 1) {
-        shell_save_output = true;
+        shell_save_output        = true;
         shell_response_start_pos = current_response_raw.size();
 
         std::string cmd_with_output = command + " 2>&1";
-        FILE* pipe = popen(cmd_with_output.c_str(), "r");
-        if (pipe) {
+        FILE* fp = popen(cmd_with_output.c_str(), "r");
+        if (fp) {
             char buffer[256];
             std::string cmd_output;
-            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            while (fgets(buffer, sizeof(buffer), fp) != nullptr)
                 cmd_output += buffer;
-            }
-            pclose(pipe);
+            pclose(fp);
 
-            if (!cmd_output.empty()) {
-                current_response_raw += "\n\n--- Command Output ---\n" + cmd_output;
-            } else {
-                current_response_raw += "\n\n[Command executed successfully (no output)]";
-            }
+            current_response_raw += cmd_output.empty()
+                ? "\n\n[Command executed successfully (no output)]"
+                : "\n\n--- Command Output ---\n" + cmd_output;
         } else {
             current_response_raw += "\n\n[Failed to execute command]";
         }
-
-        shell_prompt_shown = false;
     } else {
+        shell_save_output = false;
         current_response_raw += "\n\n[Command not executed by user]";
-        shell_prompt_shown = false;
     }
 
-    Fl::remove_timeout(timer_redraw_cb);
-    processing = false;
-    btn_send->activate();
-    redraw_chat_window();
+    // ── Step 6: Finish — kills child, closes pipe, saves history, redraws ──
+    finish_processing(false);
 }
 
 // Shell mode timeout - show dialog after receiving some output

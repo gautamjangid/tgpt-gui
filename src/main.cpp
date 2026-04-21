@@ -31,6 +31,7 @@ int main(int argc, char **argv) {
     menubar->add("History/Last 10 Chats", 0, limit_cb, (void*)(intptr_t)10);
     menubar->add("History/Last 20 Chats", 0, limit_cb, (void*)(intptr_t)20);
     menubar->add("Help/About", 0, about_cb);
+    menubar->add("Help/License", 0, license_cb);
     menubar->add("Help/Updates", 0, updates_cb);
 
     // Output area
