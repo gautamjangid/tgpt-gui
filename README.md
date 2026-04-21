@@ -99,6 +99,43 @@ Prompt: "list all files in current directory"
 
 > **Note:** Only `-c` (code mode) and `-s` (shell mode) are supported in Extra Args. The `-i` (interactive) and `-is` (interactive shell) modes use bubbletea — a TUI framework that requires a real PTY with raw mode and cursor control. This is fundamentally incompatible with GUI-based process piping and is therefore not supported.
 
+## Supported Modes
+
+The tgpt GUI supports several command-line modes that can be enabled through the Settings dialog:
+
+### -c (Code Mode)
+Outputs responses in formatted, copyable code blocks. Ideal for programming-related queries.
+
+### -s (Shell Mode)
+Suggests shell commands with a Yes/No confirmation dialog before execution. Great for system administration tasks.
+
+### -f (Search Mode)
+Enables web search functionality via Google Custom Search API. Requires environment variables:
+- `TGPT_GOOGLE_API_KEY`
+- `TGPT_GOOGLE_SEARCH_ENGINE_ID`
+
+To set these variables:
+1. Get a Google API key from Google Cloud Console
+2. Enable the Custom Search API
+3. Create a Custom Search Engine and get its ID
+4. Add to your shell profile (e.g., ~/.bashrc):
+   ```bash
+   export TGPT_GOOGLE_API_KEY=your_api_key_here
+   export TGPT_GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
+   ```
+5. Restart the application
+
+### -q (Quiet Mode)
+Suppresses progress spinners and other verbose output for cleaner responses.
+
+## Unsupported Modes
+
+The following interactive modes are not supported in the GUI due to incompatibility with GUI process piping:
+- `-i` (Interactive Mode)
+- `-is` (Interactive Shell Mode)
+
+These modes use bubbletea's raw PTY which conflicts with the GUI's stdin/stdout handling.
+
 
 ## Uninstallation
 
