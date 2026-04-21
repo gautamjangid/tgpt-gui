@@ -13,6 +13,7 @@ void close_chat_cb(Fl_Widget*, void*);
 void exit_cb(Fl_Widget*, void*);
 void settings_cb(Fl_Widget*, void*);
 void about_cb(Fl_Widget*, void*);
+void license_cb(Fl_Widget*, void*);
 void updates_cb(Fl_Widget*, void*);
 
 void copy_block_by_index(int idx);
