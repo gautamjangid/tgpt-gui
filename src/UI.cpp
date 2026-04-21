@@ -228,10 +228,7 @@ void load_chat_file_cb(Fl_Widget*, void*) {
 }
 
 void close_chat_cb(Fl_Widget*, void*) {
-    // Kill any active interactive session
-    if (processing || interactive_session_active) {
-        interactive_session_active = false;
-        is_interactive_mode = false;
+    if (processing) {
         finish_processing(true);
     }
     chat_history.clear();
@@ -306,7 +303,7 @@ void settings_cb(Fl_Widget*, void*) {
     data->inp_apikey->value(tgpt_api_key.c_str());
 
     data->inp_args = new Fl_Input(120, 140, 260, 30, "Extra Args:");
-    data->inp_args->tooltip("Space-separated args (e.g. -i -m)");
+    data->inp_args->tooltip("Space-separated args (e.g. -c for code mode, -s for shell mode)");
     data->inp_args->value(tgpt_custom_args.c_str());
 
     Fl_Help_View* hv = new Fl_Help_View(10, 180, 380, 80);

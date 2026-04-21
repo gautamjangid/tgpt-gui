@@ -53,22 +53,18 @@ extern bool needs_redraw;
 extern std::atomic<bool> processing;
 extern pid_t child_pid;
 extern int child_pipe;
-extern int child_stdin_pipe;
-extern int child_pty_master;
 extern std::string current_response_raw;
 
 // Mode Flags (detected from custom args per request)
 extern bool is_code_mode;
 extern bool is_shell_mode;
-extern bool is_interactive_mode;
-extern bool interactive_session_active;
 
 // Shell mode state
 extern bool shell_prompt_shown;
 extern bool shell_save_output;
 extern size_t shell_response_start_pos;
 
-// Interactive mode state
+// Response state
 extern bool current_response_saved;
 
 // Code Block State

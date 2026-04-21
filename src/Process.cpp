@@ -14,22 +14,12 @@
 #include <fstream>
 #include <FL/fl_ask.H>
 #include <stdlib.h>
-#include <termios.h>
-#ifdef __linux__
-#include <pty.h>
-#elif defined(__APPLE__)
-#include <util.h>
-#elif defined(_WIN32)
-// Windows doesn't have PTY in the same way, but we can use conpty on Windows 10+
-// For now, we'll fall back to regular pipes on Windows
-#endif
 
 namespace tgpt {
 
 void finish_processing(bool cancelled) {
     processing = false;
     Fl::remove_timeout(timer_redraw_cb);
-    Fl::remove_timeout(interactive_response_timeout_cb);
     btn_send->activate();
 
     if (child_pipe != -1) {
@@ -37,19 +27,10 @@ void finish_processing(bool cancelled) {
         close(child_pipe);
         child_pipe = -1;
     }
-    if (child_stdin_pipe != -1) {
-        close(child_stdin_pipe);
-        child_stdin_pipe = -1;
-    }
-    if (child_pty_master != -1) {
-        Fl::remove_fd(child_pty_master);
-        close(child_pty_master);
-        child_pty_master = -1;
-    }
     if (child_pid > 0) {
         if (cancelled) kill(child_pid, SIGTERM);
         waitpid(child_pid, nullptr, 0);
-        child_pid = 0; // waitpid reaps the defunct child
+        child_pid = 0;
     }
 
     // Handle shell mode output saving to file
@@ -69,7 +50,6 @@ void finish_processing(bool cancelled) {
             if (ofs.is_open()) {
                 ofs << cmd_output;
             }
-            // Append note to response so user knows where output was saved
             current_response_raw += "\n\n[Command output saved to: " + filepath + "]";
         }
     }
@@ -77,8 +57,6 @@ void finish_processing(bool cancelled) {
     std::string final_response;
     if (cancelled) {
         final_response = sanitize_output(current_response_raw) + "\n*(Cancelled)*";
-    } else if (is_interactive_mode || interactive_session_active) {
-        final_response = strip_interactive_prompts(sanitize_output(current_response_raw));
     } else {
         final_response = sanitize_output(current_response_raw);
     }
@@ -93,8 +71,6 @@ void finish_processing(bool cancelled) {
     shell_prompt_shown = false;
     shell_save_output = false;
     shell_response_start_pos = 0;
-    interactive_session_active = false;
-    is_interactive_mode = false;
     is_code_mode = false;
     is_shell_mode = false;
     current_response_saved = false;
@@ -104,42 +80,17 @@ void finish_processing(bool cancelled) {
 }
 
 void cancel_cb(Fl_Widget*, void*) {
-    if (processing || interactive_session_active) {
+    if (processing) {
         finish_processing(true);
     }
-}
-
-// Called when no data received for ~2s in interactive mode
-void interactive_response_timeout_cb(void*) {
-    if (!interactive_session_active || !processing) return;
-
-    processing = false;
-    btn_send->activate();
-    Fl::remove_timeout(timer_redraw_cb);
-
-    std::string final_response = strip_interactive_prompts(
-        sanitize_output(current_response_raw));
-
-    if (!chat_history.empty()) {
-        chat_history.back().response = final_response;
-        save_history_entry(chat_history.back().prompt, final_response,
-                           chat_history.back().code_mode);
-        current_response_saved = true;
-    }
-
-    redraw_chat_window();
-    // Note: child process and pipes stay alive for follow-up prompts
 }
 
 // Shell mode: show Yes/No dialog for command execution
 void show_shell_confirm_dialog() {
     std::string sanitized = sanitize_output(current_response_raw);
-
-    // Extract the suggested command from tgpt output
-    // tgpt shell mode typically outputs the command on its own line(s)
     std::string command = sanitized;
 
-    // Remove markdown code blocks if present (common in tgpt output)
+    // Remove markdown code blocks if present
     size_t code_start = command.find("```");
     if (code_start != std::string::npos) {
         size_t code_end = command.find("```", code_start + 3);
@@ -151,7 +102,6 @@ void show_shell_confirm_dialog() {
     // Remove language identifier after opening code block
     size_t lang_end = command.find('\n');
     if (lang_end != std::string::npos && lang_end < 20) {
-        // Check if first line looks like a language name (short, no spaces)
         std::string first_line = command.substr(0, lang_end);
         if (first_line.find(' ') == std::string::npos && first_line.length() < 15) {
             command = command.substr(lang_end + 1);
@@ -165,7 +115,7 @@ void show_shell_confirm_dialog() {
         command = command.substr(start, end - start + 1);
     }
 
-    // Remove any remaining prompt patterns or tgpt metadata
+    // Remove prompt patterns
     const char* patterns[] = {"[y/n]", "(y/n)", "[Y/n]", "[y/N]", "Enter your choice", "tgpt:", "tgpt -s"};
     for (const char* pat : patterns) {
         size_t pos = command.find(pat);
@@ -174,7 +124,7 @@ void show_shell_confirm_dialog() {
         }
     }
 
-    // Trim again after removing patterns
+    // Trim again
     start = command.find_first_not_of(" \t\n\r");
     end = command.find_last_not_of(" \t\n\r");
     if (start != std::string::npos && end != std::string::npos) {
@@ -196,11 +146,9 @@ void show_shell_confirm_dialog() {
     }
 
     if (choice == 1) {
-        // User chose Yes - execute command directly
         shell_save_output = true;
         shell_response_start_pos = current_response_raw.size();
 
-        // Execute the command and capture output
         std::string cmd_with_output = command + " 2>&1";
         FILE* pipe = popen(cmd_with_output.c_str(), "r");
         if (pipe) {
@@ -211,7 +159,6 @@ void show_shell_confirm_dialog() {
             }
             pclose(pipe);
 
-            // Append command output to response
             if (!cmd_output.empty()) {
                 current_response_raw += "\n\n--- Command Output ---\n" + cmd_output;
             } else {
@@ -221,15 +168,12 @@ void show_shell_confirm_dialog() {
             current_response_raw += "\n\n[Failed to execute command]";
         }
 
-        // Mark shell mode as complete
         shell_prompt_shown = false;
     } else {
-        // User chose No - just mark as complete
         current_response_raw += "\n\n[Command not executed by user]";
         shell_prompt_shown = false;
     }
 
-    // Finish processing since we handled the command
     Fl::remove_timeout(timer_redraw_cb);
     processing = false;
     btn_send->activate();
@@ -249,54 +193,21 @@ void pipe_read_cb(int fd, void*) {
     char buffer[256];
     ssize_t bytes = read(fd, buffer, sizeof(buffer));
     if (bytes > 0) {
-        if (interactive_session_active && !processing) {
-            processing = true;
-            btn_send->deactivate();
-            current_response_raw.clear();
-        }
         current_response_raw.append(buffer, bytes);
         needs_redraw = true;
 
         // Shell mode: detect command and show confirmation dialog
         if (is_shell_mode && !shell_prompt_shown) {
             std::string sanitized = sanitize_output(current_response_raw);
-            // Check if we have received enough output to extract a command
-            // Shell mode output typically contains a command suggestion
-            // Wait for at least 100 characters or detection of command-like content
-            if (sanitized.length() > 100 || (sanitized.length() > 30 && sanitized.find("tgpt") != std::string::npos)) {
+            if (sanitized.length() > 100 ||
+                (sanitized.length() > 30 && sanitized.find("tgpt") != std::string::npos)) {
                 shell_prompt_shown = true;
                 Fl::remove_timeout(shell_mode_timeout_cb);
                 show_shell_confirm_dialog();
             }
         }
-
-        // Interactive mode: detect prompt indicator for smart timeout
-        if (interactive_session_active) {
-            std::string sanitized = sanitize_output(current_response_raw);
-            bool prompt_detected = false;
-            const char* prompts[] = {">>> ", "╰─> ", ">> ", "tgpt:", "╭─ You", "You"};
-            for (const char* p : prompts) {
-                std::string ps(p);
-                if (sanitized.size() >= ps.size() &&
-                    sanitized.compare(sanitized.size() - ps.size(), ps.size(), ps) == 0) {
-                    prompt_detected = true;
-                    break;
-                }
-            }
-
-            Fl::remove_timeout(interactive_response_timeout_cb);
-            if (prompt_detected) {
-                Fl::add_timeout(0.5, interactive_response_timeout_cb);
-            } else {
-                Fl::add_timeout(120.0, interactive_response_timeout_cb);
-            }
-        }
     } else if (bytes == 0 || (bytes == -1 && errno != EAGAIN && errno != EINTR)) {
         // Process ended
-        if (interactive_session_active) {
-            interactive_session_active = false;
-            is_interactive_mode = false;
-        }
         finish_processing(false);
     }
 }
@@ -312,18 +223,14 @@ void send_cb(Fl_Widget*, void*) {
         if (chat_history.size() > 0) chat_history.pop_front();
     }
 
-    // Detect modes from custom args (only if not resuming an interactive session)
-    if (!interactive_session_active) {
-        is_code_mode = false;
-        is_shell_mode = false;
-        is_interactive_mode = false;
-        std::istringstream iss(tgpt_custom_args);
-        std::string arg;
-        while (iss >> arg) {
-            if (arg == "-c" || arg == "--code") is_code_mode = true;
-            if (arg == "-s" || arg == "--shell") is_shell_mode = true;
-            if (arg == "-i" || arg == "--interactive") is_interactive_mode = true;
-        }
+    // Detect modes from custom args
+    is_code_mode = false;
+    is_shell_mode = false;
+    std::istringstream iss(tgpt_custom_args);
+    std::string arg;
+    while (iss >> arg) {
+        if (arg == "-c" || arg == "--code") is_code_mode = true;
+        if (arg == "-s" || arg == "--shell") is_shell_mode = true;
     }
 
     // Create history entry
@@ -347,97 +254,44 @@ void send_cb(Fl_Widget*, void*) {
     needs_redraw = true;
     Fl::add_timeout(0.15, timer_redraw_cb);
 
-    // If interactive session is active, just send prompt to existing process
-    if (interactive_session_active && child_stdin_pipe != -1) {
-        std::string msg = prompt + "\n";
-        write(child_stdin_pipe, msg.c_str(), msg.size());
-        return;
-    }
-
-    // --- Start new process ---
+    // -------------------------------------------------------------------
+    // Launch a new tgpt child process
+    // -------------------------------------------------------------------
     int pipefd[2];
     if (pipe(pipefd) != 0) {
         finish_processing(true);
         return;
     }
 
-    // Set non-blocking on read end
+    // Non-blocking read end
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
 
-    // Create stdin pipe for -i mode only
-    int stdin_pipefd[2] = {-1, -1};
-#ifdef __linux__
-    int pty_master = -1;
-    int pty_slave = -1;
-#endif
-    
-    if (is_interactive_mode) {
-#ifdef __linux__
-        // Use PTY for interactive mode on Linux
-        if (openpty(&pty_master, &pty_slave, NULL, NULL, NULL) != 0) {
-            close(pipefd[0]);
-            close(pipefd[1]);
-            finish_processing(true);
-            return;
-        }
-        // Set non-blocking on PTY master
-        int flags = fcntl(pty_master, F_GETFL, 0);
-        fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
-#else
-        // Fall back to regular pipes on other platforms
-        if (pipe(stdin_pipefd) != 0) {
-            close(pipefd[0]);
-            close(pipefd[1]);
-            finish_processing(true);
-            return;
-        }
-#endif
-    }
-    // For -s mode, no stdin pipe needed - stdin will be /dev/null
-    // Set timeout to show dialog even if pattern detection fails
     if (is_shell_mode) {
         Fl::add_timeout(3.0, shell_mode_timeout_cb);
     }
 
     child_pid = fork();
+
     if (child_pid == 0) {
-        // Child process
-#ifdef __linux__
-        if (is_interactive_mode && pty_slave != -1) {
-            // PTY mode: all I/O goes through the slave — do NOT touch pipefd at all.
-            // Close both ends of the unused pipe in the child.
-            close(pipefd[0]);
-            close(pipefd[1]);
-            dup2(pty_slave, STDIN_FILENO);
-            dup2(pty_slave, STDOUT_FILENO);
-            dup2(pty_slave, STDERR_FILENO);
-            close(pty_slave);
-            close(pty_master);
-        } else {
-#endif
-            // Non-PTY path: route stdout/stderr through the pipe to the parent.
-            dup2(pipefd[1], STDOUT_FILENO);
-            dup2(pipefd[1], STDERR_FILENO);
-            close(pipefd[0]);
-            close(pipefd[1]);
+        // ----------------------------------------------------------------
+        // CHILD PROCESS
+        // ----------------------------------------------------------------
+        // stdout/stderr → pipe to parent
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[0]);
+        close(pipefd[1]);
 
-            if (is_shell_mode) {
-                // For shell mode, connect stdin to /dev/null
-                int devnull = open("/dev/null", O_RDONLY);
-                if (devnull != -1) {
-                    dup2(devnull, STDIN_FILENO);
-                    close(devnull);
-                }
-            } else if (stdin_pipefd[0] != -1) {
-                dup2(stdin_pipefd[0], STDIN_FILENO);
-                close(stdin_pipefd[0]);
-                close(stdin_pipefd[1]);
+        if (is_shell_mode) {
+            int devnull = open("/dev/null", O_RDONLY);
+            if (devnull != -1) {
+                dup2(devnull, STDIN_FILENO);
+                close(devnull);
             }
-#ifdef __linux__
         }
-#endif
 
+        // Build argv
         std::vector<char*> args;
         args.push_back((char*)"tgpt");
         if (!tgpt_provider.empty()) {
@@ -455,95 +309,34 @@ void send_cb(Fl_Widget*, void*) {
 
         std::vector<std::string> custom_args_storage;
         if (!tgpt_custom_args.empty()) {
-            std::istringstream iss(tgpt_custom_args);
-            std::string arg;
-            while (iss >> arg) {
-                custom_args_storage.push_back(arg);
+            std::istringstream iss2(tgpt_custom_args);
+            std::string a;
+            while (iss2 >> a) {
+                custom_args_storage.push_back(a);
             }
             for (auto& st : custom_args_storage) {
                 args.push_back((char*)st.c_str());
             }
         }
 
-        // For -i mode, don't pass prompt as CLI arg (it goes via stdin)
-        // For -s mode, prompt IS passed as CLI arg, stdin is only for y/n confirmation
-        if (!is_interactive_mode) {
-            args.push_back((char*)prompt.c_str());
-        }
+        args.push_back((char*)prompt.c_str());
         args.push_back(nullptr);
 
         execvp("tgpt", args.data());
         _exit(127);
+
     } else if (child_pid > 0) {
+        // ----------------------------------------------------------------
+        // PARENT PROCESS — set up fd watching
+        // ----------------------------------------------------------------
         close(pipefd[1]);
-
-#ifdef __linux__
-        if (is_interactive_mode && pty_master != -1) {
-            // PTY mode: the child closed pipefd entirely and uses only the PTY slave
-            // for all I/O. Registering pipefd[0] here would get an immediate EOF
-            // (no writer left) and trigger finish_processing before any data arrives.
-            // Discard pipefd[0] and use only the PTY master for read/write.
-            close(pipefd[0]);      // FIX: don't register — would EOF immediately
-            child_pipe = -1;       // FIX: keep -1 so finish_processing skips it
-
-            close(pty_slave);
-            child_pty_master = pty_master;
-            child_stdin_pipe = pty_master; // PTY master used for both read and write
-            Fl::add_fd(child_pty_master, FL_READ, pipe_read_cb);
-        } else {
-            // Non-PTY path: child writes stdout/stderr to pipefd[1].
-            child_pipe = pipefd[0];
-            Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
-            if (stdin_pipefd[1] != -1) {
-                close(stdin_pipefd[0]);
-                child_stdin_pipe = stdin_pipefd[1];
-            }
-        }
-#else
         child_pipe = pipefd[0];
         Fl::add_fd(child_pipe, FL_READ, pipe_read_cb);
-        if (stdin_pipefd[1] != -1) {
-            close(stdin_pipefd[0]);
-            child_stdin_pipe = stdin_pipefd[1];
-        }
-#endif
 
-        // For -i mode, send the first prompt via stdin
-        if (is_interactive_mode) {
-            interactive_session_active = true;
-            std::string msg = prompt + "\n";
-#ifdef __linux__
-            if (child_pty_master != -1) {
-                write(child_pty_master, msg.c_str(), msg.size());
-            } else if (child_stdin_pipe != -1) {
-                write(child_stdin_pipe, msg.c_str(), msg.size());
-            }
-#else
-            if (child_stdin_pipe != -1) {
-                write(child_stdin_pipe, msg.c_str(), msg.size());
-            }
-#endif
-        }
-
-// For -s mode, prompt was passed as CLI argument, stdin is /dev/null
-// Command confirmation is handled via dialog in show_shell_confirm_dialog()
     } else {
+        // fork() failed
         close(pipefd[0]);
         close(pipefd[1]);
-#ifdef __linux__
-        if (is_interactive_mode && pty_master != -1) {
-            close(pty_master);
-            close(pty_slave);
-        } else if (stdin_pipefd[0] != -1) {
-            close(stdin_pipefd[0]);
-            close(stdin_pipefd[1]);
-        }
-#else
-        if (stdin_pipefd[0] != -1) {
-            close(stdin_pipefd[0]);
-            close(stdin_pipefd[1]);
-        }
-#endif
         finish_processing(true);
     }
 }

@@ -28,8 +28,8 @@ std::string get_app_dir() {
         struct passwd *pw = getpwuid(getuid());
         if (pw) homedir = pw->pw_dir;
     }
-    if (!homedir) return ".tgpt-gui"; // Fallback to local
-    
+    if (!homedir) return ".tgpt-gui";
+
     std::string dir = std::string(homedir) + "/.tgpt-gui";
     ensure_directory_exists(dir);
     return dir;
@@ -64,11 +64,20 @@ std::string sanitize_output(const std::string& raw) {
         if (in_ansi) continue;
 
         if (raw[i] == '\r') {
+            // '\r\n' is just a PTY/Windows line ending — the '\r' is noise.
+            // Skip it here; the '\n' on the next iteration is what matters.
+            // Only a lone '\r' (not followed by '\n') is a true carriage-return
+            // overwrite (used by progress bars / spinners).
+            if (i + 1 < raw.length() && raw[i + 1] == '\n') {
+                continue;   // skip \r; \n will be appended next iteration
+            }
+            // Lone \r: wipe the current line (terminal carriage-return behaviour)
             size_t last_nl = out.find_last_of('\n');
             if (last_nl == std::string::npos) out.clear();
             else out.resize(last_nl + 1);
         } else if (raw[i] == '\b') {
             if (!out.empty() && out.back() != '\n') {
+                // Handle multi-byte UTF-8 characters
                 while (!out.empty() && (out.back() & 0xC0) == 0x80) {
                     out.pop_back();
                 }
@@ -112,8 +121,8 @@ std::string parse_markdown_to_html(const std::string& md, bool clear_blocks) {
             in_code_block = !in_code_block;
             if (in_code_block) {
                 current_block_text.clear();
-                current_lang = line.substr(3); 
-                
+                current_lang = line.substr(3);
+
                 size_t first = current_lang.find_first_not_of(" \t\r\n");
                 if (std::string::npos == first) {
                     current_lang = "Code";
@@ -145,7 +154,7 @@ std::string parse_markdown_to_html(const std::string& md, bool clear_blocks) {
             else {
                 line = escape_html(line);
             }
-            
+
             // Bold formatting
             size_t pos = 0;
             while ((pos = line.find("**", pos)) != std::string::npos) {
@@ -156,12 +165,11 @@ std::string parse_markdown_to_html(const std::string& md, bool clear_blocks) {
                 } else break;
             }
 
-            // Basic layout
             if (line.empty()) html << "<br>";
             else html << line << "<br>";
         }
     }
-    
+
     // Close unclosed tags if streaming
     if (in_code_block) {
         html << "</font></pre></td></tr></table><br>";
@@ -183,25 +191,6 @@ std::string render_raw_code_html(const std::string& code) {
     return html.str();
 }
 
-std::string strip_interactive_prompts(const std::string& text) {
-    std::string result = text;
 
-    // Common tgpt interactive prompt patterns (at end of output)
-    const char* prompts[] = {">>> ", "╰─> ", ">> ", ">>> "};
-    for (const char* p : prompts) {
-        std::string ps(p);
-        // Remove trailing prompt
-        while (result.size() >= ps.size() &&
-               result.compare(result.size() - ps.size(), ps.size(), ps) == 0) {
-            result.resize(result.size() - ps.size());
-        }
-    }
-
-    // Trim trailing whitespace/newlines
-    while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' ')) {
-        result.pop_back();
-    }
-    return result;
-}
 
 } // namespace tgpt
