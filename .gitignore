@@ -1,5 +1,8 @@
 # Ignore docs folder as requested
-docs/
+docs/images/
+docs/images/*
+docs/plans/
+docs/plans/*
 
 # Build outputs
 *.o
