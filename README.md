@@ -1,5 +1,7 @@
 # tgpt GUI
 
+![tgpt GUI Home](docs/app_sc/ss_home.png)
+
 A lightweight, high-performance Graphical User Interface for the `tgpt` terminal tool. This application provides a streaming "typing" effect, chat history management, and is specifically optimized for legacy hardware and low-resource environments.
 
 ## Supported Systems
@@ -18,7 +20,17 @@ The installation script will automatically handle most prerequisites, but ensure
 
 ## Installation & Compilation
 
-The repository includes an installer script that simplifies the entire setup process. It will install necessary dependencies, download the `tgpt` backend if not found, compile the GUI application, and create a desktop shortcut.
+### Standalone Installation (Recommended)
+
+You can easily install `tgpt-gui` in one step using the standalone setup script without manually cloning the repository. Run the following command in your terminal:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/gautamjangid/tgpt-gui/main/scripts/setup.sh | bash
+```
+
+### Manual Repository Installation
+
+Alternatively, you can clone the repository and run the internal installer script which handles dependencies and compilation:
 
 1. Navigate to the project root directory.
 2. Give the installation script executable permissions:
